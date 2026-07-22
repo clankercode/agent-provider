@@ -2,7 +2,17 @@ import { browser } from "wxt/browser";
 import type { BridgeLimits } from "@agent-provider/protocol";
 import { canonicalJson, type CanonicalJsonValue } from "./canonical-json.js";
 import { canonicalizeProviderEndpoint } from "./provider-endpoint.js";
+import {
+  HARD_AUDIT_RETENTION,
+  tightenAuditRetention,
+  type AuditRetention,
+} from "./audit.js";
+import {
+  DEFAULT_AUTHORITY_POLICY,
+  type BaseExecutionMode,
+} from "./policy-resolution.js";
 import type { ProviderFamily, ProviderProfile } from "./provider-profiles.js";
+import type { QuotaLimits } from "./quotas.js";
 
 export type ReasoningLevel =
   "provider-default" | "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
@@ -27,6 +37,16 @@ export interface AgentProviderExtensionSettings {
   profiles: Record<string, ProviderProfile>;
   aliases: Record<string, ModelAliasSettings>;
   limits: BridgeLimits;
+  execution: {
+    defaultMode: BaseExecutionMode;
+    privateByDefault: boolean;
+  };
+  audit: {
+    persistentEnabled: boolean;
+    requirePersistent: boolean;
+    retention: AuditRetention;
+  };
+  quotas: QuotaLimits;
 }
 
 const SETTINGS_KEY = "agent-provider.settings.v1";
@@ -54,6 +74,25 @@ export const DEFAULT_SETTINGS: AgentProviderExtensionSettings = {
     maxConcurrentRequests: 2,
     maxTools: 32,
     requestTimeoutMs: 120_000,
+  },
+  execution: {
+    defaultMode: "standard",
+    privateByDefault: false,
+  },
+  audit: {
+    persistentEnabled: false,
+    requirePersistent: false,
+    retention: {
+      maxAgeMs: 7 * 24 * 60 * 60 * 1_000,
+      maxEvents: 2_000,
+      maxBytes: 2 * 1024 * 1024,
+    },
+  },
+  quotas: {
+    requestsPerMinute: DEFAULT_AUTHORITY_POLICY.requestsPerMinute,
+    requestsPerDay: DEFAULT_AUTHORITY_POLICY.requestsPerDay,
+    tokensPerDay: DEFAULT_AUTHORITY_POLICY.tokensPerDay,
+    allowUnknownPricing: DEFAULT_AUTHORITY_POLICY.allowUnknownPricing,
   },
 };
 
@@ -182,6 +221,10 @@ export function normalizeSettings(
   }
 
   const rawLimits = isRecord(value.limits) ? value.limits : {};
+  const rawExecution = isRecord(value.execution) ? value.execution : {};
+  const rawAudit = isRecord(value.audit) ? value.audit : {};
+  const rawRetention = isRecord(rawAudit.retention) ? rawAudit.retention : {};
+  const rawQuotas = isRecord(value.quotas) ? value.quotas : {};
   let legacyEndpoint = DEFAULT_SETTINGS.provider.endpoint;
   if (typeof provider.endpoint === "string") {
     try {
@@ -241,6 +284,68 @@ export function normalizeSettings(
         5_000,
         600_000,
       ),
+    },
+    execution: {
+      defaultMode:
+        rawExecution.defaultMode === "audit-first" ? "audit-first" : "standard",
+      privateByDefault: rawExecution.privateByDefault === true,
+    },
+    audit: {
+      persistentEnabled:
+        rawAudit.persistentEnabled === true ||
+        rawAudit.requirePersistent === true,
+      requirePersistent: rawAudit.requirePersistent === true,
+      retention: tightenAuditRetention({
+        maxAgeMs: numberInRange(
+          rawRetention.maxAgeMs,
+          DEFAULT_SETTINGS.audit.retention.maxAgeMs,
+          0,
+          HARD_AUDIT_RETENTION.maxAgeMs,
+        ),
+        maxEvents: numberInRange(
+          rawRetention.maxEvents,
+          DEFAULT_SETTINGS.audit.retention.maxEvents,
+          0,
+          HARD_AUDIT_RETENTION.maxEvents,
+        ),
+        maxBytes: numberInRange(
+          rawRetention.maxBytes,
+          DEFAULT_SETTINGS.audit.retention.maxBytes,
+          0,
+          HARD_AUDIT_RETENTION.maxBytes,
+        ),
+      }),
+    },
+    quotas: {
+      requestsPerMinute: numberInRange(
+        rawQuotas.requestsPerMinute,
+        DEFAULT_SETTINGS.quotas.requestsPerMinute,
+        1,
+        10_000,
+      ),
+      requestsPerDay: numberInRange(
+        rawQuotas.requestsPerDay,
+        DEFAULT_SETTINGS.quotas.requestsPerDay,
+        1,
+        1_000_000,
+      ),
+      tokensPerDay: numberInRange(
+        rawQuotas.tokensPerDay,
+        DEFAULT_SETTINGS.quotas.tokensPerDay,
+        64,
+        1_000_000_000,
+      ),
+      ...(typeof rawQuotas.costMicrosPerDay === "number"
+        ? {
+            costMicrosPerDay: numberInRange(
+              rawQuotas.costMicrosPerDay,
+              0,
+              0,
+              Number.MAX_SAFE_INTEGER,
+            ),
+          }
+        : {}),
+      allowUnknownPricing: rawQuotas.allowUnknownPricing === true,
     },
   };
 }

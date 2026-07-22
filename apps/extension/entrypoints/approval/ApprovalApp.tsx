@@ -4,27 +4,35 @@ import {
   AGENT_PROVIDER_UI_MARKER,
   type PopupResponse,
   type PopupStatus,
+  type ProviderApprovalPrompt,
 } from "../../lib/ui-messages.js";
 
-type Decision = "grant-session" | "grant-persistent" | "deny";
+type PermissionDecision = "grant-session" | "grant-persistent" | "deny";
+type FinishedDecision = PermissionDecision | "approved";
 
 function requestDetails() {
   const params = new URLSearchParams(location.search);
+  const approvalId = params.get("approvalId") ?? undefined;
   const tabId = Number(params.get("tabId"));
   const origin = params.get("origin") ?? "";
   const reason = params.get("reason")?.slice(0, 300);
   return {
+    approvalId,
     tabId,
     origin,
     ...(reason === undefined ? {} : { reason }),
-    valid: Number.isInteger(tabId) && tabId >= 0 && origin.length > 0,
+    permissionValid:
+      approvalId === undefined &&
+      Number.isInteger(tabId) &&
+      tabId >= 0 &&
+      origin.length > 0,
   };
 }
 
-async function send(
+async function sendPermission(
   tabId: number,
   origin: string,
-  decision?: Decision,
+  decision?: PermissionDecision,
 ): Promise<PopupStatus> {
   const response = (await browser.runtime.sendMessage({
     marker: AGENT_PROVIDER_UI_MARKER,
@@ -41,30 +49,81 @@ async function send(
   return response.status;
 }
 
+async function getProviderApproval(
+  approvalId: string,
+): Promise<ProviderApprovalPrompt> {
+  const response = (await browser.runtime.sendMessage({
+    marker: AGENT_PROVIDER_UI_MARKER,
+    type: "approval.get",
+    approvalId,
+  })) as PopupResponse;
+  if (!response.ok || response.approval === undefined) {
+    throw new Error(response.error ?? "This approval is no longer available.");
+  }
+  return response.approval;
+}
+
+async function decideProvider(
+  approvalId: string,
+  decision: "approved" | "denied",
+): Promise<void> {
+  const response = (await browser.runtime.sendMessage({
+    marker: AGENT_PROVIDER_UI_MARKER,
+    type: "approval.decide",
+    approvalId,
+    decision,
+  })) as PopupResponse;
+  if (!response.ok) {
+    throw new Error(response.error ?? "The extension rejected this decision.");
+  }
+}
+
 export function ApprovalApp() {
   const details = requestDetails();
   const [status, setStatus] = useState<PopupStatus>();
+  const [providerApproval, setProviderApproval] =
+    useState<ProviderApprovalPrompt>();
   const [busy, setBusy] = useState(false);
-  const [finished, setFinished] = useState<Decision>();
+  const [finished, setFinished] = useState<FinishedDecision>();
   const [error, setError] = useState<string>();
 
   useEffect(() => {
-    if (!details.valid) {
-      setError("This permission request is invalid or has expired.");
-      return;
-    }
-    void send(details.tabId, details.origin)
-      .then(setStatus)
-      .catch((cause) =>
-        setError(cause instanceof Error ? cause.message : String(cause)),
-      );
-  }, [details.origin, details.tabId, details.valid]);
+    const load =
+      details.approvalId === undefined
+        ? details.permissionValid
+          ? sendPermission(details.tabId, details.origin).then(setStatus)
+          : Promise.reject(
+              new Error("This permission request is invalid or has expired."),
+            )
+        : getProviderApproval(details.approvalId).then(setProviderApproval);
+    void load.catch((cause) =>
+      setError(cause instanceof Error ? cause.message : String(cause)),
+    );
+  }, [
+    details.approvalId,
+    details.origin,
+    details.permissionValid,
+    details.tabId,
+  ]);
 
-  async function decide(decision: Decision) {
+  async function decide(decision: FinishedDecision) {
     setBusy(true);
     setError(undefined);
     try {
-      setStatus(await send(details.tabId, details.origin, decision));
+      if (details.approvalId !== undefined) {
+        await decideProvider(
+          details.approvalId,
+          decision === "approved" ? "approved" : "denied",
+        );
+      } else {
+        setStatus(
+          await sendPermission(
+            details.tabId,
+            details.origin,
+            decision as PermissionDecision,
+          ),
+        );
+      }
       setFinished(decision);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -74,19 +133,22 @@ export function ApprovalApp() {
   }
 
   if (finished !== undefined) {
+    const denied = finished === "deny";
     return (
       <main className="approval-shell approval-shell--finished">
         <div className="seal" aria-hidden="true">
           AP
         </div>
         <p className="kicker">Decision recorded</p>
-        <h1>{finished === "deny" ? "Access denied" : "Access allowed"}</h1>
+        <h1>{denied ? "Request denied" : "Request allowed"}</h1>
         <p className="lede">
-          {finished === "grant-persistent"
-            ? "This origin can use your configured model aliases until you revoke it."
-            : finished === "grant-session"
-              ? "This tab can use your configured model aliases for this session."
-              : "No model authority was granted to the page."}
+          {finished === "approved"
+            ? "This single model request may now dispatch. The approval cannot be reused."
+            : finished === "grant-persistent"
+              ? "This origin can use your configured model aliases until you revoke it."
+              : finished === "grant-session"
+                ? "This tab can use your configured model aliases for this session."
+                : "No new model authority was granted to the page."}
         </p>
         <button
           className="primary"
@@ -99,6 +161,8 @@ export function ApprovalApp() {
     );
   }
 
+  const providerPrompt = providerApproval !== undefined;
+  const origin = providerApproval?.origin ?? details.origin;
   return (
     <main className="approval-shell">
       <header>
@@ -116,19 +180,28 @@ export function ApprovalApp() {
 
       <section className="decision-grid">
         <div className="request-copy">
-          <p className="kicker">Page access request</p>
-          <h1>Let this origin use your model?</h1>
+          <p className="kicker">
+            {providerPrompt
+              ? "Provider dispatch approval"
+              : "Page access request"}
+          </p>
+          <h1>
+            {providerPrompt
+              ? "Send this model request?"
+              : "Let this origin use your model?"}
+          </h1>
           <p className="lede">
-            The page will receive model output through Agent Provider. Your API
-            key remains inside extension storage.
+            {providerPrompt
+              ? "Audit-first mode pauses every dispatch here. This approval applies once and expires automatically."
+              : "The page will receive model output through Agent Provider. Your API key remains inside extension storage."}
           </p>
 
           <div className="origin-plate">
             <span>Requesting origin</span>
-            <code>{details.origin || "Unknown origin"}</code>
+            <code>{origin || "Unknown origin"}</code>
           </div>
 
-          {details.reason ? (
+          {!providerPrompt && details.reason ? (
             <blockquote>
               <span>Page-provided reason</span>
               {details.reason}
@@ -137,47 +210,79 @@ export function ApprovalApp() {
 
           <dl>
             <div>
-              <dt>Model aliases</dt>
-              <dd>{status?.aliases.join(", ") || "Configured aliases"}</dd>
+              <dt>{providerPrompt ? "Model alias" : "Model aliases"}</dt>
+              <dd>
+                {providerApproval?.alias ??
+                  status?.aliases.join(", ") ??
+                  "Configured aliases"}
+              </dd>
             </div>
             <div>
-              <dt>Provider</dt>
-              <dd>{status?.providerConfigured ? "Ready" : "Needs setup"}</dd>
+              <dt>{providerPrompt ? "Execution mode" : "Provider"}</dt>
+              <dd>
+                {providerPrompt
+                  ? "Audit-first · single use"
+                  : status?.providerConfigured
+                    ? "Ready"
+                    : "Needs setup"}
+              </dd>
             </div>
             <div>
-              <dt>Credentials</dt>
-              <dd>Never exposed to page code</dd>
+              <dt>{providerPrompt ? "Request size" : "Credentials"}</dt>
+              <dd>
+                {providerPrompt
+                  ? `${providerApproval.requestBytes.toLocaleString()} bytes`
+                  : "Never exposed to page code"}
+              </dd>
             </div>
           </dl>
         </div>
 
         <aside>
-          <p className="kicker">Choose scope</p>
+          <p className="kicker">
+            {providerPrompt ? "One-time decision" : "Choose scope"}
+          </p>
           <button
             className="primary"
-            disabled={busy || !details.valid}
-            onClick={() => void decide("grant-session")}
+            disabled={
+              busy ||
+              (providerPrompt ? !providerApproval : !details.permissionValid)
+            }
+            onClick={() =>
+              void decide(providerPrompt ? "approved" : "grant-session")
+            }
           >
-            <span>Allow this tab</span>
-            <small>Ends when the tab closes</small>
+            <span>{providerPrompt ? "Allow once" : "Allow this tab"}</span>
+            <small>
+              {providerPrompt
+                ? "Consumed by this dispatch"
+                : "Ends when the tab closes"}
+            </small>
           </button>
-          <button
-            className="secondary"
-            disabled={busy || !details.valid}
-            onClick={() => void decide("grant-persistent")}
-          >
-            <span>Always allow origin</span>
-            <small>Revocable in settings</small>
-          </button>
+          {!providerPrompt ? (
+            <button
+              className="secondary"
+              disabled={busy || !details.permissionValid}
+              onClick={() => void decide("grant-persistent")}
+            >
+              <span>Always allow origin</span>
+              <small>Revocable in settings</small>
+            </button>
+          ) : null}
           <button
             className="deny"
-            disabled={busy || !details.valid}
+            disabled={
+              busy ||
+              (providerPrompt ? !providerApproval : !details.permissionValid)
+            }
             onClick={() => void decide("deny")}
           >
             Deny request
           </button>
           <p className="boundary">
-            Trust applies to the entire origin, including every script it runs.
+            {providerPrompt
+              ? "Prompt content remains on the page; this surface shows authority metadata only."
+              : "Trust applies to the entire origin, including every script it runs."}
           </p>
         </aside>
       </section>

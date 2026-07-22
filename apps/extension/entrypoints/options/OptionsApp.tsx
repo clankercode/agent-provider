@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { browser } from "wxt/browser";
 import {
   DEFAULT_SETTINGS,
   loadSettings,
@@ -10,6 +11,22 @@ import type {
   ProviderFamily,
   ProviderProfile,
 } from "../../lib/provider-profiles.js";
+import {
+  AGENT_PROVIDER_UI_MARKER,
+  type AuditView,
+  type PopupResponse,
+} from "../../lib/ui-messages.js";
+
+async function readAudit(): Promise<AuditView> {
+  const response = (await browser.runtime.sendMessage({
+    marker: AGENT_PROVIDER_UI_MARKER,
+    type: "audit.query",
+  })) as PopupResponse;
+  if (!response.ok || response.audit === undefined) {
+    throw new Error(response.error ?? "The audit ledger is unavailable.");
+  }
+  return response.audit;
+}
 
 export function OptionsApp() {
   const [settings, setSettings] = useState<AgentProviderExtensionSettings>(() =>
@@ -19,6 +36,7 @@ export function OptionsApp() {
   const [showKey, setShowKey] = useState(false);
   const [status, setStatus] = useState("Loading…");
   const [error, setError] = useState<string>();
+  const [audit, setAudit] = useState<AuditView>();
 
   useEffect(() => {
     void loadSettings().then((loaded) => {
@@ -26,7 +44,21 @@ export function OptionsApp() {
       setAliasesText(JSON.stringify(loaded.aliases, null, 2));
       setStatus("Ready");
     });
+    void readAudit()
+      .then(setAudit)
+      .catch(() => undefined);
   }, []);
+
+  async function deleteAudit() {
+    const response = (await browser.runtime.sendMessage({
+      marker: AGENT_PROVIDER_UI_MARKER,
+      type: "audit.delete",
+    })) as PopupResponse;
+    if (!response.ok) {
+      throw new Error(response.error ?? "The audit ledger was not deleted.");
+    }
+    setAudit(await readAudit());
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -391,6 +423,201 @@ export function OptionsApp() {
               />
             </label>
           </div>
+        </section>
+
+        <section>
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Execution authority</span>
+              <h2>Modes, audit, and durable quotas</h2>
+              <p>
+                Audit-first requires one extension-owned approval per model
+                dispatch. Private sessions never write persistent audit data.
+              </p>
+            </div>
+            <span className={audit?.persistentError ? "warn" : "good"}>
+              {audit?.persistentError ? "Audit write failed" : "Audit healthy"}
+            </span>
+          </div>
+
+          <div className="grid">
+            <label>
+              Default dispatch mode
+              <select
+                value={settings.execution.defaultMode}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    execution: {
+                      ...current.execution,
+                      defaultMode: event.currentTarget.value as
+                        "standard" | "audit-first",
+                    },
+                  }))
+                }
+              >
+                <option value="standard">Standard</option>
+                <option value="audit-first">Audit-first</option>
+              </select>
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={settings.execution.privateByDefault}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    execution: {
+                      ...current.execution,
+                      privateByDefault: event.currentTarget.checked,
+                    },
+                  }))
+                }
+              />
+              New sessions are private by default
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={settings.audit.persistentEnabled}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    audit: {
+                      ...current.audit,
+                      persistentEnabled: event.currentTarget.checked,
+                      requirePersistent: event.currentTarget.checked
+                        ? current.audit.requirePersistent
+                        : false,
+                    },
+                  }))
+                }
+              />
+              Keep metadata-only audit between restarts
+            </label>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={settings.audit.requirePersistent}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    audit: {
+                      ...current.audit,
+                      requirePersistent: event.currentTarget.checked,
+                      persistentEnabled:
+                        event.currentTarget.checked ||
+                        current.audit.persistentEnabled,
+                    },
+                  }))
+                }
+              />
+              Block dispatch if persistent audit cannot be written
+            </label>
+          </div>
+
+          <div className="grid limits">
+            <label>
+              Requests per minute / origin
+              <input
+                type="number"
+                min={1}
+                value={settings.quotas.requestsPerMinute}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    quotas: {
+                      ...current.quotas,
+                      requestsPerMinute: Number(event.currentTarget.value),
+                    },
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Requests per day / origin
+              <input
+                type="number"
+                min={1}
+                value={settings.quotas.requestsPerDay}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    quotas: {
+                      ...current.quotas,
+                      requestsPerDay: Number(event.currentTarget.value),
+                    },
+                  }))
+                }
+              />
+            </label>
+            <label>
+              Tokens per day / origin
+              <input
+                type="number"
+                min={64}
+                value={settings.quotas.tokensPerDay}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    quotas: {
+                      ...current.quotas,
+                      tokensPerDay: Number(event.currentTarget.value),
+                    },
+                  }))
+                }
+              />
+            </label>
+          </div>
+
+          <div className="audit-heading">
+            <div>
+              <strong>Metadata ledger</strong>
+              <span>
+                {audit === undefined
+                  ? "Loading…"
+                  : `${audit.session.length} session · ${audit.persistent.length} persistent`}
+              </span>
+            </div>
+            <button
+              className="danger-link"
+              type="button"
+              disabled={audit === undefined || audit.persistent.length === 0}
+              onClick={() =>
+                void deleteAudit().catch((cause) => setError(String(cause)))
+              }
+            >
+              Delete persistent audit
+            </button>
+          </div>
+          <ol className="audit-list">
+            {[...(audit?.persistent ?? []), ...(audit?.session ?? [])]
+              .sort((left, right) => right.timestamp - left.timestamp)
+              .slice(0, 12)
+              .map((event) => (
+                <li key={`${event.id}:${event.timestamp}`}>
+                  <code>{event.origin ?? "global"}</code>
+                  <span>
+                    {event.type} ·{" "}
+                    {event.status ?? event.decision ?? "recorded"}
+                  </span>
+                  <time dateTime={new Date(event.timestamp).toISOString()}>
+                    {new Date(event.timestamp).toLocaleString()}
+                  </time>
+                </li>
+              ))}
+          </ol>
+          {audit !== undefined &&
+          audit.session.length === 0 &&
+          audit.persistent.length === 0 ? (
+            <div className="empty-state">
+              <strong>No audit events yet</strong>
+              <span>
+                Only bounded metadata appears here; prompt content is never
+                recorded.
+              </span>
+            </div>
+          ) : null}
         </section>
 
         {error ? <div className="error">{error}</div> : null}

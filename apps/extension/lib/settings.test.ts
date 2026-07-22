@@ -61,4 +61,42 @@ describe("extension provider settings", () => {
     expect(settings.aliases.default?.profileId).toBeUndefined();
     expect(settings.aliases.default?.model).toBe("gpt-5-mini");
   });
+
+  it("normalizes execution, audit, and durable quota controls", () => {
+    const settings = normalizeSettings({
+      execution: { defaultMode: "audit-first", privateByDefault: true },
+      audit: {
+        persistentEnabled: false,
+        requirePersistent: true,
+        retention: {
+          maxAgeMs: Number.MAX_SAFE_INTEGER,
+          maxEvents: 500,
+          maxBytes: 100_000,
+        },
+      },
+      quotas: {
+        requestsPerMinute: 3,
+        requestsPerDay: 25,
+        tokensPerDay: 12_000,
+        costMicrosPerDay: 500_000,
+        allowUnknownPricing: true,
+      },
+    });
+    expect(settings.execution).toEqual({
+      defaultMode: "audit-first",
+      privateByDefault: true,
+    });
+    expect(settings.audit.persistentEnabled).toBe(true);
+    expect(settings.audit.requirePersistent).toBe(true);
+    expect(settings.audit.retention.maxAgeMs).toBeLessThan(
+      Number.MAX_SAFE_INTEGER,
+    );
+    expect(settings.quotas).toEqual({
+      requestsPerMinute: 3,
+      requestsPerDay: 25,
+      tokensPerDay: 12_000,
+      costMicrosPerDay: 500_000,
+      allowUnknownPricing: true,
+    });
+  });
 });

@@ -119,6 +119,39 @@ code {
   gap: 8px;
   margin-top: 12px;
 }
+.session-controls {
+  display: grid;
+  gap: 8px;
+  margin-top: 9px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 9px;
+  background: var(--surface);
+}
+.session-controls > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.session-controls span,
+.session-controls small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.session-controls button.compact {
+  min-width: 88px;
+  padding: 5px 8px;
+  border-color: var(--line);
+  background: var(--raised);
+  color: var(--ink);
+  font-size: 10px;
+}
+.session-controls button.compact[aria-pressed="true"] {
+  border-color: var(--authority);
+  background: var(--authority-soft);
+  color: var(--authority);
+}
 button {
   cursor: pointer;
   border: 1px solid var(--authority);

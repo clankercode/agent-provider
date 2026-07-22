@@ -82,6 +82,30 @@ export function PopupApp() {
     }
   }
 
+  async function configureSession(patch: {
+    mode?: "standard" | "audit-first";
+    privateMode?: boolean;
+  }) {
+    if (page === undefined || status === undefined) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      setStatus(
+        await send({
+          marker: AGENT_PROVIDER_UI_MARKER,
+          type: "session.set",
+          ...page,
+          mode: patch.mode ?? status.execution.mode,
+          privateMode: patch.privateMode ?? status.execution.privateMode,
+        }),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const granted =
     status?.permission === "granted-session" ||
     status?.permission === "granted-persistent";
@@ -115,6 +139,50 @@ export function PopupApp() {
               </b>
             </div>
           </div>
+          <section className="session-controls" aria-label="Session controls">
+            <div>
+              <span>Dispatch</span>
+              <button
+                className="compact"
+                type="button"
+                aria-pressed={status.execution.mode === "audit-first"}
+                disabled={busy}
+                onClick={() =>
+                  void configureSession({
+                    mode:
+                      status.execution.mode === "audit-first"
+                        ? "standard"
+                        : "audit-first",
+                  })
+                }
+              >
+                {status.execution.mode === "audit-first"
+                  ? "Audit-first"
+                  : "Standard"}
+              </button>
+            </div>
+            <div>
+              <span>Session trace</span>
+              <button
+                className="compact"
+                type="button"
+                aria-pressed={status.execution.privateMode}
+                disabled={busy}
+                onClick={() =>
+                  void configureSession({
+                    privateMode: !status.execution.privateMode,
+                  })
+                }
+              >
+                {status.execution.privateMode ? "Private" : "Recorded"}
+              </button>
+            </div>
+            <small className={status.audit.persistentError ? "warn" : "muted"}>
+              {status.audit.persistentError
+                ? "Persistent audit write needs attention"
+                : `${status.audit.sessionEvents} session event${status.audit.sessionEvents === 1 ? "" : "s"}`}
+            </small>
+          </section>
           <div className="actions">
             {!granted ? (
               <>

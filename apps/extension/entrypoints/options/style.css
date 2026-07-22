@@ -223,8 +223,75 @@ button:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--authority) 35%, transparent);
   outline-offset: 2px;
 }
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
 .inline input {
   flex: 1;
+}
+.check {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--raised);
+  color: var(--ink);
+}
+.check input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--authority);
+}
+.audit-heading,
+.audit-heading > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.audit-heading > div {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 2px;
+}
+.audit-heading span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.audit-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  overflow: hidden;
+}
+.audit-list li {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.1fr) minmax(180px, 1fr) auto;
+  gap: 14px;
+  padding: 10px 12px;
+  background: var(--raised);
+  font-size: 12px;
+}
+.audit-list li + li {
+  border-top: 1px solid var(--line);
+}
+.audit-list code {
+  overflow: hidden;
+  color: var(--authority);
+  text-overflow: ellipsis;
+}
+.audit-list time {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .good,
@@ -321,6 +388,10 @@ aside p {
   .limits,
   .profile-grid {
     grid-template-columns: 1fr;
+  }
+  .audit-list li {
+    grid-template-columns: 1fr;
+    gap: 3px;
   }
   .section-heading {
     align-items: flex-start;

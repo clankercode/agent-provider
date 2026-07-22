@@ -19,7 +19,20 @@ import {
   type PermissionState,
   type WireValue,
 } from "@agent-provider/protocol";
+import type { LanguageModelV4Usage } from "@ai-sdk/provider";
 import { isAllowedApplicationOrigin } from "../agent-provider.config.js";
+import {
+  AuditRecorder,
+  IndexedDbPersistentAuditStore,
+  type AuditEvent,
+} from "../lib/audit.js";
+import {
+  createApprovalRecord,
+  IndexedDbApprovalStore,
+  type ProviderApprovalBinding,
+} from "../lib/approvals.js";
+import { fingerprintCanonicalJson } from "../lib/canonical-json.js";
+import { PersistentQuotaManager } from "../lib/persistent-quotas.js";
 import {
   getPermissionState,
   grantPersistentPermission,
@@ -32,6 +45,7 @@ import {
   type ProviderAlias,
   type ProviderProfile,
 } from "../lib/provider-profiles.js";
+import { QuotaExceededError, type QuotaReservation } from "../lib/quotas.js";
 import {
   redactSensitiveText,
   sanitizeGenerateResult,
@@ -44,6 +58,7 @@ import {
 } from "../lib/settings.js";
 import {
   isPopupRequest,
+  type ProviderApprovalPrompt,
   type PopupResponse,
   type PopupStatus,
 } from "../lib/ui-messages.js";
@@ -62,7 +77,16 @@ class RequestFailure extends Error {
 const sessionGrants = new Set<string>();
 const sessionAliasFingerprints = new Map<string, Record<string, string>>();
 const deniedUntil = new Map<string, number>();
+const sessionExecution = new Map<
+  string,
+  { mode: "standard" | "audit-first"; privateMode: boolean }
+>();
 const AUTHORITY_FINGERPRINTS_KEY = "agent-provider.authority-fingerprints.v1";
+const quotaManager = new PersistentQuotaManager();
+const auditRecorder = new AuditRecorder(new IndexedDbPersistentAuditStore());
+const approvalStore = new IndexedDbApprovalStore();
+let persistentAuditError = false;
+let quotaRecovery: Promise<void> | undefined;
 
 interface PendingPermission {
   complete(decision: PermissionDecision): Promise<void>;
@@ -71,16 +95,169 @@ interface PendingPermission {
 
 const pendingPermissions = new Map<string, PendingPermission>();
 
-// TODO(alpha-hardening): The audited QuotaLedger, AuditRecorder, grant-policy,
-// and single-use approval stores in lib/ are deliberate integration seams, not
-// yet background lifecycle enforcement. Before a production claim, wire them
-// around provider dispatch and tool execution exactly as tracked in
-// docs/FUTURE-CONCERNS.md. Current enforcement is exact-origin consent,
-// authority fingerprints, request/concurrency/token bounds, timeouts, and
-// result scrubbing.
+interface PendingProviderApproval {
+  prompt: ProviderApprovalPrompt;
+  binding: ProviderApprovalBinding;
+  complete(decision: "approved" | "denied"): Promise<void>;
+}
+
+const pendingProviderApprovals = new Map<string, PendingProviderApproval>();
 
 function sessionKey(tabId: number, origin: string): string {
   return `${tabId}:${origin}`;
+}
+
+function executionFor(
+  tabId: number,
+  origin: string,
+  settings: AgentProviderExtensionSettings,
+): { mode: "standard" | "audit-first"; privateMode: boolean } {
+  const key = sessionKey(tabId, origin);
+  const current = sessionExecution.get(key);
+  if (current !== undefined) return current;
+  const initial = {
+    mode: settings.execution.defaultMode,
+    privateMode: settings.execution.privateByDefault,
+  };
+  sessionExecution.set(key, initial);
+  return initial;
+}
+
+async function recordAudit(
+  settings: AgentProviderExtensionSettings,
+  execution: { privateMode: boolean },
+  event: Omit<AuditEvent, "id" | "timestamp">,
+): Promise<void> {
+  const result = await auditRecorder.record(
+    { ...event, timestamp: Date.now() },
+    {
+      privateMode: execution.privateMode,
+      persistentEnabled: settings.audit.persistentEnabled,
+      requirePersistentAudit: settings.audit.requirePersistent,
+      retention: settings.audit.retention,
+    },
+  );
+  if (settings.audit.persistentEnabled && !execution.privateMode) {
+    persistentAuditError = result.persistentError;
+  }
+}
+
+function usageTokens(
+  usage: LanguageModelV4Usage | undefined,
+  fallback: number,
+): number {
+  if (usage === undefined) return fallback;
+  const input = usage.inputTokens.total;
+  const output = usage.outputTokens.total;
+  if (input === undefined && output === undefined) return fallback;
+  return Math.max(0, input ?? 0) + Math.max(0, output ?? 0);
+}
+
+function ensureQuotaRecovery(): Promise<void> {
+  quotaRecovery ??= (async () => {
+    const settings = await loadSettings();
+    const recovered = await quotaManager.recoverUnknownOutcomes(
+      settings.quotas,
+    );
+    for (const reservation of recovered) {
+      await recordAudit(
+        settings,
+        { privateMode: false },
+        {
+          type: "model-request",
+          origin: reservation.scope,
+          requestId: reservation.id,
+          mode: settings.execution.defaultMode,
+          status: "outcome-unknown",
+          outputTokens: reservation.estimatedTokens,
+          errorCode: "WORKER_RESTART",
+        },
+      );
+    }
+  })();
+  return quotaRecovery;
+}
+
+async function requestProviderApproval(input: {
+  binding: ProviderApprovalBinding;
+  alias: string;
+  requestBytes: number;
+}): Promise<void> {
+  const id = crypto.randomUUID();
+  const expiresAt = Date.now() + 120_000;
+  const prompt: ProviderApprovalPrompt = {
+    id,
+    kind: "provider",
+    origin: input.binding.origin,
+    alias: input.alias,
+    mode: "audit-first",
+    requestBytes: input.requestBytes,
+    expiresAt,
+  };
+  const recordId = await new Promise<string>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingProviderApprovals.delete(id);
+      reject(
+        new RequestFailure(
+          "APPROVAL_EXPIRED",
+          "The provider approval request expired.",
+          true,
+        ),
+      );
+    }, 120_000);
+    pendingProviderApprovals.set(id, {
+      prompt,
+      binding: input.binding,
+      complete: async (decision) => {
+        clearTimeout(timer);
+        pendingProviderApprovals.delete(id);
+        const record = await createApprovalRecord({
+          id,
+          kind: "provider",
+          binding: input.binding,
+          decision,
+          createdAt: Date.now(),
+          expiresAt,
+        });
+        await approvalStore.put(record);
+        resolve(record.id);
+      },
+    });
+    void browser.windows
+      .create({
+        url: browser.runtime.getURL(`/approval.html?approvalId=${id}`),
+        type: "popup",
+        width: 760,
+        height: 590,
+        focused: true,
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        pendingProviderApprovals.delete(id);
+        reject(
+          new RequestFailure(
+            "BRIDGE_UNAVAILABLE",
+            "The extension could not open its provider approval window.",
+            true,
+          ),
+        );
+      });
+  });
+  const consumed = await approvalStore.consume(
+    recordId,
+    "provider",
+    input.binding,
+  );
+  if (!consumed.ok) {
+    const expired = consumed.reason === "expired";
+    throw new RequestFailure(
+      expired ? "APPROVAL_EXPIRED" : "APPROVAL_DENIED",
+      expired
+        ? "The provider approval request expired."
+        : "The provider request was denied in the extension.",
+      expired,
+    );
+  }
 }
 
 async function aliasFingerprints(
@@ -236,6 +413,13 @@ function toBridgeError(
   if (error instanceof PolicyError) {
     return { code: "POLICY_VIOLATION", message: error.message };
   }
+  if (error instanceof QuotaExceededError) {
+    return {
+      code: "RATE_LIMITED",
+      message: `The configured ${error.dimension} quota is exhausted.`,
+      retryable: true,
+    };
+  }
   if (
     (error instanceof DOMException && error.name === "AbortError") ||
     (error instanceof Error && error.name === "AbortError")
@@ -264,6 +448,9 @@ async function verifyTrustedTab(
 export default defineBackground(() => {
   void lockStorageToExtensionContexts().catch(() => {
     // Older extension platforms may not expose storage access levels.
+  });
+  void ensureQuotaRecovery().catch(() => {
+    // Requests await the same recovery and surface a safe bridge error.
   });
 
   browser.runtime.onConnect.addListener((port) => {
@@ -346,9 +533,18 @@ export default defineBackground(() => {
       if (requestId === undefined) return;
       let timedOut = false;
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let requestSettings: AgentProviderExtensionSettings | undefined;
+      let requestExecution:
+        { mode: "standard" | "audit-first"; privateMode: boolean } | undefined;
+      let reservation: QuotaReservation | undefined;
+      let dispatched = false;
+      let reservedTokens = 0;
+      let auditAlias: string | undefined;
+      const startedAt = Date.now();
       const requestKey = `${message.clientId}:${requestId}`;
 
       try {
+        await ensureQuotaRecovery();
         const permission = await permissionFor(tabId, origin);
         if (
           permission !== "granted-session" &&
@@ -361,6 +557,9 @@ export default defineBackground(() => {
         }
 
         const settings = await loadSettings();
+        requestSettings = settings;
+        const execution = executionFor(tabId, origin, settings);
+        requestExecution = execution;
         if (activeCount >= settings.limits.maxConcurrentRequests) {
           throw new RequestFailure(
             "RATE_LIMITED",
@@ -381,6 +580,7 @@ export default defineBackground(() => {
           );
         }
         const alias = settings.aliases[payload.alias];
+        auditAlias = payload.alias;
         if (alias === undefined) {
           throw new RequestFailure(
             "UNKNOWN_MODEL_ALIAS",
@@ -405,10 +605,8 @@ export default defineBackground(() => {
             `No credential is configured for model alias “${payload.alias}”.`,
           );
         }
-        if (
-          estimateWireBytes(payload.callOptions) >
-          settings.limits.maxRequestBytes
-        ) {
+        const requestBytes = estimateWireBytes(payload.callOptions);
+        if (requestBytes > settings.limits.maxRequestBytes) {
           throw new RequestFailure(
             "POLICY_VIOLATION",
             "The model request is larger than the configured byte limit.",
@@ -417,6 +615,54 @@ export default defineBackground(() => {
 
         const rawOptions = decodeWireValue(payload.callOptions);
         const safeOptions = enforceCallPolicy(rawOptions, alias, settings);
+        reservedTokens =
+          typeof safeOptions.maxOutputTokens === "number"
+            ? safeOptions.maxOutputTokens
+            : alias.maxOutputTokens;
+        await recordAudit(settings, execution, {
+          type: "model-request",
+          origin,
+          requestId,
+          alias: payload.alias,
+          mode: execution.mode,
+          status: "queued",
+          requestBytes,
+        });
+        reservation = await quotaManager.reserve(settings.quotas, {
+          id: `${tabId}:${message.sessionId}:${requestKey}`,
+          scope: origin,
+          estimatedTokens: reservedTokens,
+          pricingKnown: false,
+        });
+        if (execution.mode === "audit-first") {
+          const aliasFingerprint = (await aliasFingerprints(settings))[
+            payload.alias
+          ];
+          if (aliasFingerprint === undefined) {
+            throw new RequestFailure(
+              "UNKNOWN_MODEL_ALIAS",
+              "The model alias disappeared before approval.",
+            );
+          }
+          const binding: ProviderApprovalBinding = {
+            origin,
+            tabId,
+            clientId: message.clientId,
+            sessionId: message.sessionId!,
+            requestId,
+            mode: execution.mode,
+            aliasFingerprint,
+            dispatchPayloadHash: await fingerprintCanonicalJson({
+              alias: payload.alias,
+              callOptions: payload.callOptions,
+            }),
+          };
+          await requestProviderApproval({
+            binding,
+            alias: payload.alias,
+            requestBytes,
+          });
+        }
         const controller = new AbortController();
         controllers.set(requestKey, controller);
         activeCount += 1;
@@ -424,6 +670,16 @@ export default defineBackground(() => {
           timedOut = true;
           controller.abort();
         }, settings.limits.requestTimeoutMs);
+        await recordAudit(settings, execution, {
+          type: "model-request",
+          origin,
+          requestId,
+          alias: payload.alias,
+          mode: execution.mode,
+          status: "dispatched",
+          requestBytes,
+        });
+        dispatched = true;
 
         if (mode === "generate") {
           const result = await runGenerate(
@@ -432,6 +688,21 @@ export default defineBackground(() => {
             safeOptions,
             controller.signal,
           );
+          await quotaManager.settle(settings.quotas, reservation.id, {
+            tokens: usageTokens(result.usage, reservedTokens),
+          });
+          reservation = undefined;
+          await recordAudit(settings, execution, {
+            type: "model-request",
+            origin,
+            requestId,
+            alias: payload.alias,
+            mode: execution.mode,
+            status: "completed",
+            requestBytes,
+            outputTokens: usageTokens(result.usage, reservedTokens),
+            durationMs: Date.now() - startedAt,
+          });
           post(
             createBridgeEnvelope({
               direction: "extension-to-page",
@@ -449,7 +720,9 @@ export default defineBackground(() => {
             safeOptions,
             controller.signal,
           );
+          let streamUsage: LanguageModelV4Usage | undefined;
           for await (const part of result.stream) {
+            if (part.type === "finish") streamUsage = part.usage;
             const safePart = sanitizeStreamPart(part);
             if (safePart === undefined) continue;
             post(
@@ -463,6 +736,22 @@ export default defineBackground(() => {
               }) as ExtensionToPageMessage,
             );
           }
+          const tokens = usageTokens(streamUsage, reservedTokens);
+          await quotaManager.settle(settings.quotas, reservation.id, {
+            tokens,
+          });
+          reservation = undefined;
+          await recordAudit(settings, execution, {
+            type: "model-request",
+            origin,
+            requestId,
+            alias: payload.alias,
+            mode: execution.mode,
+            status: "completed",
+            requestBytes,
+            outputTokens: tokens,
+            durationMs: Date.now() - startedAt,
+          });
           post(
             createBridgeEnvelope({
               direction: "extension-to-page",
@@ -474,6 +763,44 @@ export default defineBackground(() => {
           );
         }
       } catch (error) {
+        if (reservation !== undefined && requestSettings !== undefined) {
+          try {
+            if (dispatched) {
+              await quotaManager.settle(
+                requestSettings.quotas,
+                reservation.id,
+                { tokens: reservedTokens },
+              );
+            } else {
+              await quotaManager.release(
+                requestSettings.quotas,
+                reservation.id,
+              );
+            }
+            reservation = undefined;
+          } catch {
+            // A persisted reservation remains conservative outcome-unknown
+            // state and will be reconciled on the next worker start.
+          }
+        }
+        if (requestSettings !== undefined && requestExecution !== undefined) {
+          try {
+            const bridgeError = toBridgeError(error, { timedOut });
+            await recordAudit(requestSettings, requestExecution, {
+              type: "model-request",
+              origin,
+              requestId,
+              ...(auditAlias === undefined ? {} : { alias: auditAlias }),
+              mode: requestExecution.mode,
+              status: dispatched ? "outcome-unknown" : "failed",
+              errorCode: bridgeError.code,
+              ...(dispatched ? { outputTokens: reservedTokens } : {}),
+              durationMs: Date.now() - startedAt,
+            });
+          } catch {
+            // The original request failure remains the user-facing result.
+          }
+        }
         postError(
           message.clientId,
           requestId,
@@ -672,12 +999,63 @@ export default defineBackground(() => {
     for (const key of deniedUntil.keys()) {
       if (key.startsWith(prefix)) deniedUntil.delete(key);
     }
+    for (const key of sessionExecution.keys()) {
+      if (key.startsWith(prefix)) sessionExecution.delete(key);
+    }
   });
 
   browser.runtime.onMessage.addListener(
     async (value: unknown, sender): Promise<PopupResponse | undefined> => {
-      if (sender.id !== browser.runtime.id || !isPopupRequest(value)) {
+      const extensionPage = browser.runtime.getURL("/");
+      if (
+        sender.id !== browser.runtime.id ||
+        !sender.url?.startsWith(extensionPage) ||
+        !isPopupRequest(value)
+      ) {
         return undefined;
+      }
+      if (value.type === "approval.get") {
+        const pending = pendingProviderApprovals.get(value.approvalId);
+        return pending === undefined
+          ? { ok: false, error: "This approval expired or was already used." }
+          : { ok: true, approval: pending.prompt };
+      }
+      if (value.type === "approval.decide") {
+        const pending = pendingProviderApprovals.get(value.approvalId);
+        if (pending === undefined) {
+          return {
+            ok: false,
+            error: "This approval expired or was already used.",
+          };
+        }
+        await pending.complete(value.decision);
+        return { ok: true };
+      }
+      if (value.type === "audit.query") {
+        let persistent: AuditEvent[] = [];
+        try {
+          persistent = [
+            ...(await auditRecorder.persistentEvents(value.origin)),
+          ];
+          persistentAuditError = false;
+        } catch {
+          persistentAuditError = true;
+        }
+        return {
+          ok: true,
+          audit: {
+            session: [...auditRecorder.sessionEvents(value.origin)],
+            persistent,
+            persistentError: persistentAuditError,
+          },
+        };
+      }
+      if (value.type === "audit.delete") {
+        const deleted =
+          value.origin === undefined
+            ? await auditRecorder.deleteAllPersistent()
+            : await auditRecorder.deletePersistentOrigin(value.origin);
+        return { ok: true, deleted };
       }
       if (!(await verifyTrustedTab(value.tabId, value.origin))) {
         return { ok: false, error: "The active tab changed." };
@@ -685,6 +1063,13 @@ export default defineBackground(() => {
 
       const key = sessionKey(value.tabId, value.origin);
       const settings = await loadSettings();
+      const execution = executionFor(value.tabId, value.origin, settings);
+      if (value.type === "session.set") {
+        sessionExecution.set(key, {
+          mode: value.mode,
+          privateMode: value.privateMode,
+        });
+      }
       if (value.type === "permission.set") {
         if (value.decision === "grant-session") {
           sessionGrants.add(key);
@@ -713,6 +1098,32 @@ export default defineBackground(() => {
         if (value.decision !== "revoke") {
           await pendingPermissions.get(key)?.complete(value.decision);
         }
+        await recordAudit(settings, execution, {
+          type: "permission-decision",
+          origin: value.origin,
+          mode: execution.mode,
+          decision:
+            value.decision === "deny" || value.decision === "revoke"
+              ? "denied"
+              : "allowed",
+          ...(value.decision === "grant-persistent"
+            ? { grantScope: "persistent" }
+            : value.decision === "grant-session"
+              ? { grantScope: "session" }
+              : {}),
+        });
+      }
+
+      let persistentEvents = 0;
+      if (settings.audit.persistentEnabled) {
+        try {
+          persistentEvents = (
+            await auditRecorder.persistentEvents(value.origin)
+          ).length;
+          persistentAuditError = false;
+        } catch {
+          persistentAuditError = true;
+        }
       }
 
       const status: PopupStatus = {
@@ -724,6 +1135,13 @@ export default defineBackground(() => {
             (profile) => profile.apiKey.length > 0,
           ),
         aliases: Object.keys(settings.aliases).sort(),
+        execution: executionFor(value.tabId, value.origin, settings),
+        audit: {
+          persistentEnabled: settings.audit.persistentEnabled,
+          persistentError: persistentAuditError,
+          sessionEvents: auditRecorder.sessionEvents(value.origin).length,
+          persistentEvents,
+        },
       };
       return { ok: true, status };
     },

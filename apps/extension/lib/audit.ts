@@ -297,14 +297,16 @@ export class AuditRecorder {
       privateMode: boolean;
       persistentEnabled: boolean;
       requirePersistentAudit?: boolean;
+      retention?: Partial<AuditRetention>;
       now?: number;
     },
   ): Promise<{ persistent: boolean; persistentError: boolean }> {
     const event = createAuditEvent(input);
     const now = options.now ?? Date.now();
+    const retention = options.retention ?? this.retention;
     this.#session = applyAuditRetention(
       [...this.#session, event],
-      this.retention,
+      retention,
       now,
     );
     if (options.privateMode || !options.persistentEnabled) {
@@ -313,7 +315,7 @@ export class AuditRecorder {
     try {
       const current = await this.persistent.load();
       await this.persistent.replace(
-        applyAuditRetention([...current, event], this.retention, now),
+        applyAuditRetention([...current, event], retention, now),
       );
       return { persistent: true, persistentError: false };
     } catch (error) {
