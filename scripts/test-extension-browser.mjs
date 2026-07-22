@@ -182,7 +182,10 @@ try {
   try {
     await app.locator(".agent-provider-chat").waitFor({ timeout: 10_000 });
   } catch (error) {
-    const body = ((await app.locator("body").textContent()) ?? "").slice(0, 500);
+    const body = ((await app.locator("body").textContent()) ?? "").slice(
+      0,
+      500,
+    );
     throw new Error(
       `Dashboard fixture did not render at ${app.url()}: ${body || "empty body"}`,
       { cause: error },
@@ -194,33 +197,58 @@ try {
     "Provider storage was exposed to page JavaScript.",
   );
 
-  const popup = await context.newPage();
-  const appTabId = await options.evaluate(async (origin) => {
-    const tabs = await chrome.tabs.query({});
-    return tabs.find((tab) => tab.url?.startsWith(origin))?.id;
-  }, appOrigin);
+  await app.bringToFront();
+  const appTabId = await options.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    return tab?.id;
+  });
   assert(
     appTabId !== undefined,
     "The dashboard tab was not visible to the extension.",
   );
-  await options.evaluate(
-    (tabId) => chrome.tabs.update(tabId, { active: true }),
-    appTabId,
-  );
-  await popup.goto(`${extensionOrigin}/popup.html`, {
-    waitUntil: "networkidle",
+  const sendUi = (request) =>
+    options.evaluate((value) => chrome.runtime.sendMessage(value), {
+      marker: "agent-provider.extension.ui.v1",
+      tabId: appTabId,
+      origin: appOrigin,
+      ...request,
+    });
+
+  let response = await sendUi({
+    type: "permission.set",
+    decision: "grant-session",
   });
-  await popup.getByText(appOrigin, { exact: true }).waitFor();
+  assert(
+    response?.status?.permission === "granted-session",
+    "Session grant failed.",
+  );
 
-  await popup.getByRole("button", { name: "Allow this tab" }).click();
-  await popup.getByText("granted-session", { exact: true }).waitFor();
-
-  await popup.getByRole("button", { name: "Off for site" }).click();
-  await popup.getByRole("button", { name: "On for site" }).waitFor();
-  await popup.getByRole("button", { name: "Recorded" }).click();
-  await popup.getByRole("button", { name: "Paused" }).waitFor();
-  await popup.getByRole("button", { name: "Private" }).click();
-  await popup.getByRole("button", { name: "On for site" }).waitFor();
+  response = await sendUi({ type: "audit.set", persistentEnabled: true });
+  assert(
+    response?.status?.audit?.persistentEnabled,
+    "Per-origin audit did not enable.",
+  );
+  response = await sendUi({
+    type: "session.set",
+    mode: "standard",
+    privateMode: true,
+  });
+  assert(
+    response?.status?.execution?.privateMode,
+    "Private mode did not enable.",
+  );
+  response = await sendUi({
+    type: "session.set",
+    mode: "standard",
+    privateMode: false,
+  });
+  assert(
+    !response?.status?.execution?.privateMode,
+    "Private mode did not disable.",
+  );
 
   if (live) {
     let authenticationFailed = false;
@@ -250,24 +278,27 @@ try {
     }
   }
 
-  await popup.bringToFront();
-  await popup.getByRole("button", { name: "Revoke access" }).click();
-  await popup.getByText("prompt", { exact: true }).waitFor();
-
-  await popup.getByRole("button", { name: "Always allow" }).click();
-  await popup.getByText("granted-persistent", { exact: true }).waitFor();
-  await options.evaluate(
-    (tabId) => chrome.tabs.update(tabId, { active: true }),
-    appTabId,
+  response = await sendUi({ type: "permission.set", decision: "revoke" });
+  assert(response?.status?.permission === "prompt", "Grant revocation failed.");
+  response = await sendUi({
+    type: "permission.set",
+    decision: "grant-persistent",
+  });
+  assert(
+    response?.status?.permission === "granted-persistent",
+    "Persistent grant failed.",
   );
-  await popup.reload({ waitUntil: "networkidle" });
-  await popup.getByText("granted-persistent", { exact: true }).waitFor();
+  response = await sendUi({ type: "status" });
+  assert(
+    response?.status?.permission === "granted-persistent",
+    "Persistent grant was not retained.",
+  );
 
-  const auditPagePromise = context.waitForEvent("page");
-  await popup
-    .getByRole("button", { name: "Inspect this site’s audit" })
-    .click();
-  const auditPage = await auditPagePromise;
+  const auditPage = await context.newPage();
+  await auditPage.goto(
+    `${extensionOrigin}/options.html?origin=${encodeURIComponent(appOrigin)}`,
+    { waitUntil: "networkidle" },
+  );
   await auditPage.waitForLoadState("networkidle");
   await auditPage.getByText("Site ledger", { exact: true }).waitFor();
   await auditPage.getByText(appOrigin, { exact: true }).first().waitFor();

@@ -118,9 +118,16 @@ try {
     (tabId) => chrome.tabs.update(tabId, { active: true }),
     appTabId,
   );
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`, {
-    waitUntil: "networkidle",
+  const popupQuery = new URLSearchParams({
+    tabId: String(appTabId),
+    origin: "http://127.0.0.1:5173",
   });
+  await popup.goto(
+    `chrome-extension://${extensionId}/popup.html?${popupQuery}`,
+    {
+      waitUntil: "networkidle",
+    },
+  );
   await popup.setViewportSize({ width: 360, height: 600 });
   await snap(popup, "popup", "light", { fullPage: false });
   await snap(popup, "popup", "dark", { fullPage: false });

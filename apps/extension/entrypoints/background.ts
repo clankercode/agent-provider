@@ -89,6 +89,7 @@ const sessionExecution = new Map<
   string,
   { mode: "standard" | "audit-first"; privateMode: boolean }
 >();
+const connectedTabOrigins = new Map<string, number>();
 const AUTHORITY_FINGERPRINTS_KEY = "agent-provider.authority-fingerprints.v1";
 const quotaManager = new PersistentQuotaManager();
 const auditRecorder = new AuditRecorder(new IndexedDbPersistentAuditStore());
@@ -117,6 +118,70 @@ const approvedToolCalls = new Map<
 
 function sessionKey(tabId: number, origin: string): string {
   return `${tabId}:${origin}`;
+}
+
+function optionalOriginPattern(origin: string): string {
+  const url = new URL(origin);
+  if (url.protocol !== "https:" || url.origin !== origin) {
+    throw new Error("Only exact HTTPS application origins can be enabled.");
+  }
+  return `${origin}/*`;
+}
+
+async function dynamicContentScriptId(origin: string): Promise<string> {
+  return `agent-provider-${(await fingerprintCanonicalJson(origin)).slice(0, 24)}`;
+}
+
+async function originBridgeEnabled(origin: string): Promise<boolean> {
+  if (isAllowedApplicationOrigin(origin)) return true;
+  try {
+    return await browser.permissions.contains({
+      origins: [optionalOriginPattern(origin)],
+    });
+  } catch {
+    return false;
+  }
+}
+
+async function setOriginBridge(
+  tabId: number,
+  origin: string,
+  enabled: boolean,
+): Promise<boolean> {
+  if (isAllowedApplicationOrigin(origin)) return true;
+  const pattern = optionalOriginPattern(origin);
+  const id = await dynamicContentScriptId(origin);
+  if (enabled) {
+    const granted = await browser.permissions.contains({ origins: [pattern] });
+    if (!granted) return false;
+    const existing = await browser.scripting.getRegisteredContentScripts({
+      ids: [id],
+    });
+    if (existing.length === 0) {
+      await browser.scripting.registerContentScripts([
+        {
+          id,
+          matches: [pattern],
+          js: ["content-scripts/content.js"],
+          runAt: "document_start",
+          persistAcrossSessions: true,
+        },
+      ]);
+    }
+  } else {
+    try {
+      await browser.scripting.unregisterContentScripts({ ids: [id] });
+    } catch {
+      // Registration may already have been removed by the browser or user.
+    }
+    await browser.permissions.remove({ origins: [pattern] });
+    sessionGrants.delete(sessionKey(tabId, origin));
+    sessionAliasFingerprints.delete(sessionKey(tabId, origin));
+    await revokePersistentPermission(origin);
+    await setPersistentFingerprints(origin, undefined);
+  }
+  await browser.tabs.reload(tabId);
+  return enabled;
 }
 
 function executionFor(
@@ -591,6 +656,9 @@ async function verifyTrustedTab(
   tabId: number,
   claimedOrigin: string,
 ): Promise<boolean> {
+  if ((connectedTabOrigins.get(sessionKey(tabId, claimedOrigin)) ?? 0) > 0) {
+    return true;
+  }
   try {
     const tab = await browser.tabs.get(tabId);
     return parseHttpOrigin(tab.url) === claimedOrigin;
@@ -616,11 +684,11 @@ export default defineBackground(() => {
       port.disconnect();
       return;
     }
-    if (!isAllowedApplicationOrigin(origin)) {
-      port.disconnect();
-      return;
-    }
-
+    const connectedKey = sessionKey(tabId, origin);
+    connectedTabOrigins.set(
+      connectedKey,
+      (connectedTabOrigins.get(connectedKey) ?? 0) + 1,
+    );
     let activeCount = 0;
     const sessions = new Map<string, string>();
     const controllers = new Map<string, AbortController>();
@@ -1338,6 +1406,9 @@ export default defineBackground(() => {
     });
 
     port.onDisconnect.addListener(() => {
+      const remaining = (connectedTabOrigins.get(connectedKey) ?? 1) - 1;
+      if (remaining <= 0) connectedTabOrigins.delete(connectedKey);
+      else connectedTabOrigins.set(connectedKey, remaining);
       for (const controller of controllers.values()) controller.abort();
       controllers.clear();
       for (const key of ownedPendingKeys) {
@@ -1354,6 +1425,9 @@ export default defineBackground(() => {
 
   browser.tabs.onRemoved.addListener((tabId) => {
     const prefix = `${tabId}:`;
+    for (const key of connectedTabOrigins.keys()) {
+      if (key.startsWith(prefix)) connectedTabOrigins.delete(key);
+    }
     for (const key of sessionGrants) {
       if (key.startsWith(prefix)) {
         sessionGrants.delete(key);
@@ -1443,6 +1517,23 @@ export default defineBackground(() => {
       const settings = await loadSettings();
       let effectiveSettings = settings;
       const execution = executionFor(value.tabId, value.origin, settings);
+      if (value.type === "origin.set") {
+        try {
+          const enabled = await setOriginBridge(
+            value.tabId,
+            value.origin,
+            value.enabled,
+          );
+          if (value.enabled && !enabled) {
+            return { ok: false, error: "Site access was not granted." };
+          }
+        } catch (cause) {
+          return {
+            ok: false,
+            error: cause instanceof Error ? cause.message : String(cause),
+          };
+        }
+      }
       if (value.type === "session.set") {
         sessionExecution.set(key, {
           mode: value.mode,
@@ -1527,6 +1618,7 @@ export default defineBackground(() => {
 
       const status: PopupStatus = {
         origin: value.origin,
+        bridgeEnabled: await originBridgeEnabled(value.origin),
         permission: await permissionFor(value.tabId, value.origin),
         providerConfigured:
           effectiveSettings.provider.apiKey.length > 0 ||

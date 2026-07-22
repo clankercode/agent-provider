@@ -41,6 +41,13 @@ export type PopupRequest =
     }
   | {
       marker: typeof AGENT_PROVIDER_UI_MARKER;
+      type: "origin.set";
+      tabId: number;
+      origin: string;
+      enabled: boolean;
+    }
+  | {
+      marker: typeof AGENT_PROVIDER_UI_MARKER;
       type: "approval.get";
       approvalId: string;
     }
@@ -63,6 +70,7 @@ export type PopupRequest =
 
 export interface PopupStatus {
   origin: string;
+  bridgeEnabled: boolean;
   permission: PermissionState;
   providerConfigured: boolean;
   aliases: string[];
@@ -147,6 +155,9 @@ export function isPopupRequest(value: unknown): value is PopupRequest {
   }
   if (record.type === "audit.set") {
     return typeof record.persistentEnabled === "boolean";
+  }
+  if (record.type === "origin.set") {
+    return typeof record.enabled === "boolean";
   }
   return (
     record.type === "permission.set" &&

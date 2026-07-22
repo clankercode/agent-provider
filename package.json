@@ -24,6 +24,7 @@
     "test:packages": "node scripts/test-packed-packages.mjs",
     "test:browser": "npm run build:packages && npm run build:extension && node scripts/test-extension-browser.mjs",
     "test:browser:live": "npm run build:packages && npm run build:extension && node scripts/test-extension-browser.mjs --live",
+    "test:firefox": "npm run build:packages && npm run build:firefox && web-ext lint --source-dir apps/extension/.output/firefox-mv3 && node scripts/test-extension-firefox.mjs",
     "test:live": "npm run test:live -w agent-provider-extension",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -33,11 +34,14 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "geckodriver": "^6.1.1",
     "playwright-core": "^1.61.1",
     "prettier": "^3.9.6",
+    "selenium-webdriver": "^4.46.0",
     "tsup": "^8.5.1",
     "typescript": "^7.0.2",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "web-ext": "^10.5.0"
   },
   "overrides": {
     "adm-zip": "0.6.0",

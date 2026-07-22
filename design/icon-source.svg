@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Agent Provider">
+  <rect width="128" height="128" rx="28" fill="#15231f"/>
+  <path d="M18 24h92" stroke="#1f9477" stroke-width="7" stroke-linecap="round"/>
+  <path d="M29 94 45 48h11l16 46H61l-3-11H43l-3 11H29Zm17-21h9l-4.5-16L46 73Z" fill="#fffdf7"/>
+  <path d="M73 94V48h17c12 0 20 7 20 18s-8 18-20 18h-6v10H73Zm11-20h6c6 0 9-3 9-8s-3-8-9-8h-6v16Z" fill="#fffdf7"/>
+</svg>

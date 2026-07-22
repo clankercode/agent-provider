@@ -6,6 +6,7 @@ import {
   type PopupResponse,
   type PopupStatus,
 } from "../../lib/ui-messages.js";
+import { isAllowedApplicationOrigin } from "../../agent-provider.config.js";
 
 interface ActivePage {
   tabId: number;
@@ -13,6 +14,17 @@ interface ActivePage {
 }
 
 async function getActivePage(): Promise<ActivePage> {
+  const query = new URLSearchParams(location.search);
+  const capturedTabId = Number(query.get("tabId"));
+  const capturedOrigin = query.get("origin");
+  if (
+    Number.isSafeInteger(capturedTabId) &&
+    capturedTabId >= 0 &&
+    capturedOrigin !== null &&
+    isAllowedApplicationOrigin(capturedOrigin)
+  ) {
+    return { tabId: capturedTabId, origin: capturedOrigin };
+  }
   const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   if (tab?.id === undefined || tab.url === undefined) {
     throw new Error("No active web page.");
@@ -126,6 +138,32 @@ export function PopupApp() {
     }
   }
 
+  async function configureOrigin(enabled: boolean) {
+    if (page === undefined) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (enabled && page.origin.startsWith("https://")) {
+        const granted = await browser.permissions.request({
+          origins: [`${page.origin}/*`],
+        });
+        if (!granted) throw new Error("Site access was not granted.");
+      }
+      setStatus(
+        await send({
+          marker: AGENT_PROVIDER_UI_MARKER,
+          type: "origin.set",
+          ...page,
+          enabled,
+        }),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const granted =
     status?.permission === "granted-session" ||
     status?.permission === "granted-persistent";
@@ -222,7 +260,14 @@ export function PopupApp() {
             </small>
           </section>
           <div className="actions">
-            {!granted ? (
+            {!status.bridgeEnabled ? (
+              <button
+                disabled={busy}
+                onClick={() => void configureOrigin(true)}
+              >
+                Enable on this site
+              </button>
+            ) : !granted ? (
               <>
                 <button
                   disabled={busy}
@@ -239,13 +284,24 @@ export function PopupApp() {
                 </button>
               </>
             ) : (
-              <button
-                className="danger"
-                disabled={busy}
-                onClick={() => void decide("revoke")}
-              >
-                Revoke access
-              </button>
+              <>
+                <button
+                  className="danger"
+                  disabled={busy}
+                  onClick={() => void decide("revoke")}
+                >
+                  Revoke access
+                </button>
+                {status.origin.startsWith("https://") ? (
+                  <button
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() => void configureOrigin(false)}
+                  >
+                    Disable site bridge
+                  </button>
+                ) : null}
+              </>
             )}
           </div>
         </>

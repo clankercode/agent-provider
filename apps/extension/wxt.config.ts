@@ -6,7 +6,7 @@ export default defineConfig({
     name: "Agent Provider",
     description:
       "Use your own LLM provider with trusted, tool-enabled web applications.",
-    permissions: ["storage", "activeTab", "tabs"],
+    permissions: ["storage", "activeTab", "scripting"],
     host_permissions: [
       "https://api.openai.com/*",
       "https://api.anthropic.com/*",
@@ -16,6 +16,13 @@ export default defineConfig({
     optional_host_permissions: ["https://*/*"],
     action: {
       default_title: "Agent Provider",
+    },
+    icons: {
+      16: "icon/16.png",
+      32: "icon/32.png",
+      48: "icon/48.png",
+      96: "icon/96.png",
+      128: "icon/128.png",
     },
     ...(env.browser === "firefox"
       ? {
