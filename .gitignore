@@ -7,3 +7,4 @@ coverage/
 .ud-wff/**/events.lock
 *.tsbuildinfo
 *.log
+/release/

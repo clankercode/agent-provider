@@ -29,6 +29,30 @@ async function readAudit(origin?: string): Promise<AuditView> {
   return response.audit;
 }
 
+async function requestProviderOrigins(
+  settings: AgentProviderExtensionSettings,
+): Promise<void> {
+  const endpoints = [
+    settings.provider.endpoint,
+    ...Object.values(settings.profiles).map((profile) => profile.endpoint),
+  ];
+  const patterns = [
+    ...new Set(endpoints.map((endpoint) => `${new URL(endpoint).origin}/*`)),
+  ];
+  const missing: string[] = [];
+  for (const pattern of patterns) {
+    if (!(await browser.permissions.contains({ origins: [pattern] }))) {
+      missing.push(pattern);
+    }
+  }
+  if (
+    missing.length > 0 &&
+    !(await browser.permissions.request({ origins: missing }))
+  ) {
+    throw new Error("Provider host access was not granted.");
+  }
+}
+
 export function OptionsApp() {
   const initialAuditOrigin = new URLSearchParams(location.search).get("origin");
   const [settings, setSettings] = useState<AgentProviderExtensionSettings>(() =>
@@ -74,9 +98,9 @@ export function OptionsApp() {
     setStatus("Saving…");
     try {
       const aliases = JSON.parse(aliasesText) as unknown;
-      const saved = await saveSettings(
-        normalizeSettings({ ...settings, aliases }),
-      );
+      const next = normalizeSettings({ ...settings, aliases });
+      await requestProviderOrigins(next);
+      const saved = await saveSettings(next);
       setSettings(saved);
       setAliasesText(JSON.stringify(saved.aliases, null, 2));
       setStatus("Saved");
