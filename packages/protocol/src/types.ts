@@ -1,8 +1,8 @@
 export const AGENT_PROVIDER_CHANNEL = "agent-provider.bridge" as const;
 export const AGENT_PROVIDER_BOOTSTRAP_VERSION = 0 as const;
-export const AGENT_PROVIDER_PROTOCOL_VERSION = 1 as const;
-export const AGENT_PROVIDER_PROTOCOL_MIN = 1 as const;
-export const AGENT_PROVIDER_PROTOCOL_MAX = 1 as const;
+export const AGENT_PROVIDER_PROTOCOL_VERSION = 2 as const;
+export const AGENT_PROVIDER_PROTOCOL_MIN = 2 as const;
+export const AGENT_PROVIDER_PROTOCOL_MAX = 2 as const;
 export const AGENT_PROVIDER_PORT_NAME = "agent-provider.bridge.v1" as const;
 export const AGENT_PROVIDER_INTERNAL_MARKER =
   "agent-provider.extension.internal.v1" as const;
@@ -120,13 +120,45 @@ export interface CancelRequestPayload {
   targetRequestId: string;
 }
 
+export interface ToolApprovalRequestPayload {
+  runId: string;
+  toolCallId: string;
+  toolName: string;
+  risk: ToolRisk;
+  declarationHash: string;
+  inputHash: string;
+  input: WireValue;
+}
+
+export interface ToolApprovalResultPayload {
+  approved: boolean;
+  reason?: "denied" | "expired" | "cancelled";
+}
+
+export interface ToolExecutionReportPayload {
+  runId: string;
+  toolCallId: string;
+  toolName: string;
+  risk: ToolRisk;
+  declarationHash: string;
+  inputHash: string;
+  state: Extract<
+    OperationState,
+    "queued" | "dispatched" | "completed" | "failed" | "cancelled"
+  >;
+  occurredAt: number;
+  durationMs?: number;
+}
+
 export type PageToExtensionMessage =
   | BridgeEnvelope<"session.open", SessionOpenPayload>
   | BridgeEnvelope<"permission.query">
   | BridgeEnvelope<"permission.request", PermissionRequestPayload>
   | BridgeEnvelope<"model.generate", ModelRequestPayload>
   | BridgeEnvelope<"model.stream", ModelRequestPayload>
-  | BridgeEnvelope<"model.cancel", CancelRequestPayload>;
+  | BridgeEnvelope<"model.cancel", CancelRequestPayload>
+  | BridgeEnvelope<"tool.approval.request", ToolApprovalRequestPayload>
+  | BridgeEnvelope<"tool.execution.report", ToolExecutionReportPayload>;
 
 export type BridgeErrorCode =
   | "BRIDGE_UNAVAILABLE"
@@ -160,6 +192,7 @@ export type ExtensionToPageMessage =
   | BridgeEnvelope<"model.result", WireValue>
   | BridgeEnvelope<"model.stream.part", WireValue>
   | BridgeEnvelope<"model.stream.end">
+  | BridgeEnvelope<"tool.approval.result", ToolApprovalResultPayload>
   | BridgeEnvelope<"bridge.error", BridgeErrorPayload>;
 
 interface ApprovalBindingBase {

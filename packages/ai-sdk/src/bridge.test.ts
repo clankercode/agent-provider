@@ -3,6 +3,7 @@ import type {
   LanguageModelV4StreamPart,
 } from "@ai-sdk/provider";
 import {
+  AGENT_PROVIDER_PROTOCOL_VERSION,
   createBridgeEnvelope,
   createBootstrapReady,
   encodeWireValue,
@@ -18,6 +19,7 @@ import { AgentProviderBridge } from "./bridge.js";
 import type { AgentProviderBridgeTransport } from "./transport.js";
 
 class FakeTransport implements AgentProviderBridgeTransport {
+  readonly reports: PageToExtensionMessage[] = [];
   private listener:
     | ((
         message: ExtensionToPageMessage | BootstrapReady | BootstrapReject,
@@ -45,12 +47,17 @@ class FakeTransport implements AgentProviderBridgeTransport {
         createBootstrapReady({
           hello: message,
           sessionId: "session-test",
-          selectedVersion: 1,
+          selectedVersion: AGENT_PROVIDER_PROTOCOL_VERSION,
           capabilities: testCapabilities(),
         }),
       );
       return;
     }
+    if (message.type === "tool.execution.report") {
+      this.reports.push(message);
+      return;
+    }
+
     const requestId = message.requestId;
     if (requestId === undefined) {
       return;
@@ -89,6 +96,20 @@ class FakeTransport implements AgentProviderBridgeTransport {
           requestId,
           type: "model.result",
           payload: encodeWireValue(result),
+        }) as ExtensionToPageMessage,
+      );
+      return;
+    }
+
+    if (message.type === "tool.approval.request") {
+      this.emit(
+        createBridgeEnvelope({
+          direction: "extension-to-page",
+          clientId: message.clientId,
+          sessionId: message.sessionId!,
+          requestId,
+          type: "tool.approval.result",
+          payload: { approved: true },
         }) as ExtensionToPageMessage,
       );
       return;
@@ -142,7 +163,7 @@ class FakeTransport implements AgentProviderBridgeTransport {
 
 function testCapabilities(): BridgeCapabilities {
   return {
-    protocolVersion: 1,
+    protocolVersion: AGENT_PROVIDER_PROTOCOL_VERSION,
     extensionVersion: "test",
     origin: "https://internal.example",
     permission: "granted-session",
@@ -160,8 +181,9 @@ function testCapabilities(): BridgeCapabilities {
 
 describe("AgentProviderBridge", () => {
   it("connects and transports generate and stream calls", async () => {
+    const transport = new FakeTransport();
     const bridge = new AgentProviderBridge({
-      transport: new FakeTransport(),
+      transport,
       connectTimeoutMs: 100,
       requestTimeoutMs: 100,
     });
@@ -183,6 +205,30 @@ describe("AgentProviderBridge", () => {
     }
     expect(received.some((part) => part.type === "text-delta")).toBe(true);
 
+    await expect(
+      bridge.requestToolApproval({
+        runId: "run-1",
+        toolCallId: "call-1",
+        toolName: "read_record",
+        risk: "read",
+        declarationHash: "a".repeat(64),
+        inputHash: "b".repeat(64),
+        input: { id: "A-17" },
+      }),
+    ).resolves.toEqual({ approved: true });
+    bridge.reportToolExecution({
+      runId: "run-1",
+      toolCallId: "call-1",
+      toolName: "read_record",
+      risk: "read",
+      declarationHash: "a".repeat(64),
+      inputHash: "b".repeat(64),
+      state: "completed",
+      occurredAt: Date.now(),
+    });
+    await new Promise((resolve) => queueMicrotask(resolve));
+    expect(transport.reports).toHaveLength(1);
+
     bridge.dispose();
   });
 });
@@ -201,7 +247,7 @@ class DisconnectingTransport implements AgentProviderBridgeTransport {
           createBootstrapReady({
             hello: message,
             sessionId: "session-disconnect",
-            selectedVersion: 1,
+            selectedVersion: AGENT_PROVIDER_PROTOCOL_VERSION,
             capabilities: testCapabilities(),
           }),
         );

@@ -1,6 +1,7 @@
 import { browser } from "wxt/browser";
 import {
   AGENT_PROVIDER_PORT_NAME,
+  AGENT_PROVIDER_PROTOCOL_VERSION,
   createBootstrapReady,
   createBridgeEnvelope,
   decodeWireValue,
@@ -17,6 +18,8 @@ import {
   type ModelRequestPayload,
   type PermissionDecision,
   type PermissionState,
+  type ToolApprovalRequestPayload,
+  type ToolExecutionReportPayload,
   type WireValue,
 } from "@agent-provider/protocol";
 import type { LanguageModelV4Usage } from "@ai-sdk/provider";
@@ -30,6 +33,7 @@ import {
   createApprovalRecord,
   IndexedDbApprovalStore,
   type ProviderApprovalBinding,
+  type ToolApprovalBinding,
 } from "../lib/approvals.js";
 import { fingerprintCanonicalJson } from "../lib/canonical-json.js";
 import { PersistentQuotaManager } from "../lib/persistent-quotas.js";
@@ -58,7 +62,9 @@ import {
 } from "../lib/settings.js";
 import {
   isPopupRequest,
+  type ApprovalPrompt,
   type ProviderApprovalPrompt,
+  type ToolApprovalPrompt,
   type PopupResponse,
   type PopupStatus,
 } from "../lib/ui-messages.js";
@@ -96,12 +102,16 @@ interface PendingPermission {
 const pendingPermissions = new Map<string, PendingPermission>();
 
 interface PendingProviderApproval {
-  prompt: ProviderApprovalPrompt;
-  binding: ProviderApprovalBinding;
+  prompt: ApprovalPrompt;
+  binding: ProviderApprovalBinding | ToolApprovalBinding;
   complete(decision: "approved" | "denied"): Promise<void>;
 }
 
-const pendingProviderApprovals = new Map<string, PendingProviderApproval>();
+const pendingApprovals = new Map<string, PendingProviderApproval>();
+const approvedToolCalls = new Map<
+  string,
+  { declarationInputHash: string; expiresAt: number }
+>();
 
 function sessionKey(tabId: number, origin: string): string {
   return `${tabId}:${origin}`;
@@ -153,6 +163,70 @@ function usageTokens(
   return Math.max(0, input ?? 0) + Math.max(0, output ?? 0);
 }
 
+function isHash(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/u.test(value);
+}
+
+function isToolApprovalPayload(
+  value: unknown,
+): value is ToolApprovalRequestPayload {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const payload = value as Record<string, unknown>;
+  return (
+    typeof payload.runId === "string" &&
+    typeof payload.toolCallId === "string" &&
+    typeof payload.toolName === "string" &&
+    payload.toolName.length > 0 &&
+    payload.toolName.length <= 128 &&
+    (payload.risk === "read" ||
+      payload.risk === "write" ||
+      payload.risk === "destructive") &&
+    isHash(payload.declarationHash) &&
+    isHash(payload.inputHash) &&
+    payload.input !== undefined
+  );
+}
+
+function isToolExecutionReport(
+  value: unknown,
+): value is ToolExecutionReportPayload {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const payload = value as Record<string, unknown>;
+  return (
+    typeof payload.runId === "string" &&
+    typeof payload.toolCallId === "string" &&
+    typeof payload.toolName === "string" &&
+    payload.toolName.length > 0 &&
+    payload.toolName.length <= 128 &&
+    (payload.risk === "read" ||
+      payload.risk === "write" ||
+      payload.risk === "destructive") &&
+    isHash(payload.declarationHash) &&
+    isHash(payload.inputHash) &&
+    (payload.state === "queued" ||
+      payload.state === "dispatched" ||
+      payload.state === "completed" ||
+      payload.state === "failed" ||
+      payload.state === "cancelled") &&
+    typeof payload.occurredAt === "number" &&
+    Number.isFinite(payload.occurredAt)
+  );
+}
+
+function toolExecutionKey(input: {
+  tabId: number;
+  clientId: string;
+  sessionId: string;
+  runId: string;
+  toolCallId: string;
+}): string {
+  return `${input.tabId}:${input.clientId}:${input.sessionId}:${input.runId}:${input.toolCallId}`;
+}
+
 function ensureQuotaRecovery(): Promise<void> {
   quotaRecovery ??= (async () => {
     const settings = await loadSettings();
@@ -196,7 +270,7 @@ async function requestProviderApproval(input: {
   };
   const recordId = await new Promise<string>((resolve, reject) => {
     const timer = setTimeout(() => {
-      pendingProviderApprovals.delete(id);
+      pendingApprovals.delete(id);
       reject(
         new RequestFailure(
           "APPROVAL_EXPIRED",
@@ -205,12 +279,12 @@ async function requestProviderApproval(input: {
         ),
       );
     }, 120_000);
-    pendingProviderApprovals.set(id, {
+    pendingApprovals.set(id, {
       prompt,
       binding: input.binding,
       complete: async (decision) => {
         clearTimeout(timer);
-        pendingProviderApprovals.delete(id);
+        pendingApprovals.delete(id);
         const record = await createApprovalRecord({
           id,
           kind: "provider",
@@ -233,7 +307,7 @@ async function requestProviderApproval(input: {
       })
       .catch(() => {
         clearTimeout(timer);
-        pendingProviderApprovals.delete(id);
+        pendingApprovals.delete(id);
         reject(
           new RequestFailure(
             "BRIDGE_UNAVAILABLE",
@@ -258,6 +332,74 @@ async function requestProviderApproval(input: {
       expired,
     );
   }
+}
+
+async function requestToolApproval(input: {
+  binding: ToolApprovalBinding;
+  prompt: Omit<ToolApprovalPrompt, "id" | "expiresAt">;
+}): Promise<{ approved: boolean; reason?: "denied" | "expired" }> {
+  const id = crypto.randomUUID();
+  const expiresAt = Date.now() + 120_000;
+  const prompt: ToolApprovalPrompt = {
+    ...input.prompt,
+    id,
+    expiresAt,
+  };
+  const recordId = await new Promise<string>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingApprovals.delete(id);
+      reject(
+        new RequestFailure(
+          "APPROVAL_EXPIRED",
+          "The tool approval request expired.",
+          true,
+        ),
+      );
+    }, 120_000);
+    pendingApprovals.set(id, {
+      prompt,
+      binding: input.binding,
+      complete: async (decision) => {
+        clearTimeout(timer);
+        pendingApprovals.delete(id);
+        const record = await createApprovalRecord({
+          id,
+          kind: "tool",
+          binding: input.binding,
+          decision,
+          createdAt: Date.now(),
+          expiresAt,
+        });
+        await approvalStore.put(record);
+        resolve(record.id);
+      },
+    });
+    void browser.windows
+      .create({
+        url: browser.runtime.getURL(`/approval.html?approvalId=${id}`),
+        type: "popup",
+        width: 760,
+        height: 640,
+        focused: true,
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        pendingApprovals.delete(id);
+        reject(
+          new RequestFailure(
+            "BRIDGE_UNAVAILABLE",
+            "The extension could not open its tool approval window.",
+            true,
+          ),
+        );
+      });
+  });
+  const consumed = await approvalStore.consume(recordId, "tool", input.binding);
+  if (consumed.ok) return { approved: true };
+  return {
+    approved: false,
+    reason: consumed.reason === "expired" ? "expired" : "denied",
+  };
 }
 
 async function aliasFingerprints(
@@ -373,7 +515,7 @@ async function capabilitiesFor(
 ): Promise<BridgeCapabilities> {
   const current = settings ?? (await loadSettings());
   return {
-    protocolVersion: 1,
+    protocolVersion: AGENT_PROVIDER_PROTOCOL_VERSION,
     extensionVersion: browser.runtime.getManifest().version,
     origin,
     permission: await permissionFor(tabId, origin),
@@ -814,6 +956,197 @@ export default defineBackground(() => {
       }
     };
 
+    const executeToolApproval = async (
+      message: ReturnType<typeof createBridgeEnvelope>,
+    ) => {
+      const requestId = message.requestId;
+      const sessionId = message.sessionId;
+      if (requestId === undefined || sessionId === undefined) return;
+      try {
+        const permission = await permissionFor(tabId, origin);
+        if (
+          permission !== "granted-session" &&
+          permission !== "granted-persistent"
+        ) {
+          throw new RequestFailure(
+            "PERMISSION_REQUIRED",
+            "This origin is not permitted to propose tools.",
+          );
+        }
+        const payload = message.payload;
+        if (!isToolApprovalPayload(payload)) {
+          throw new RequestFailure(
+            "INVALID_TOOL_INPUT",
+            "The tool approval payload is invalid.",
+          );
+        }
+        if (estimateWireBytes(payload.input) > 262_144) {
+          throw new RequestFailure(
+            "INVALID_TOOL_INPUT",
+            "The tool input exceeds the 256 KiB approval limit.",
+          );
+        }
+        if (
+          (await fingerprintCanonicalJson(payload.input)) !== payload.inputHash
+        ) {
+          throw new RequestFailure(
+            "INVALID_TOOL_INPUT",
+            "The tool input hash does not match the normalized arguments.",
+          );
+        }
+        const settings = await loadSettings();
+        const execution = executionFor(tabId, origin, settings);
+        await recordAudit(settings, execution, {
+          type: "tool-proposal",
+          origin,
+          requestId,
+          runId: payload.runId,
+          mode: execution.mode,
+          toolName: payload.toolName,
+          risk: payload.risk,
+          status: "queued",
+        });
+
+        let approved = true;
+        let reason: "denied" | "expired" | undefined;
+        const declarationInputHash = await fingerprintCanonicalJson({
+          declarationHash: payload.declarationHash,
+          inputHash: payload.inputHash,
+        });
+        if (execution.mode === "audit-first") {
+          const binding: ToolApprovalBinding = {
+            origin,
+            tabId,
+            clientId: message.clientId,
+            sessionId,
+            requestId,
+            runId: payload.runId,
+            toolCallId: payload.toolCallId,
+            toolName: payload.toolName,
+            risk: payload.risk,
+            declarationInputHash,
+          };
+          const decision = await requestToolApproval({
+            binding,
+            prompt: {
+              kind: "tool",
+              origin,
+              toolName: payload.toolName,
+              risk: payload.risk,
+              input: payload.input,
+            },
+          });
+          approved = decision.approved;
+          reason = decision.reason;
+          if (approved) {
+            approvedToolCalls.set(
+              toolExecutionKey({
+                tabId,
+                clientId: message.clientId,
+                sessionId,
+                runId: payload.runId,
+                toolCallId: payload.toolCallId,
+              }),
+              { declarationInputHash, expiresAt: Date.now() + 120_000 },
+            );
+          }
+        }
+        await recordAudit(settings, execution, {
+          type: "tool-proposal",
+          origin,
+          requestId,
+          runId: payload.runId,
+          mode: execution.mode,
+          toolName: payload.toolName,
+          risk: payload.risk,
+          decision: approved
+            ? "allowed"
+            : reason === "expired"
+              ? "expired"
+              : "denied",
+        });
+        post(
+          createBridgeEnvelope({
+            direction: "extension-to-page",
+            clientId: message.clientId,
+            sessionId,
+            requestId,
+            runId: payload.runId,
+            toolCallId: payload.toolCallId,
+            type: "tool.approval.result",
+            payload: {
+              approved,
+              ...(approved ? {} : { reason: reason ?? "denied" }),
+            },
+          }) as ExtensionToPageMessage,
+        );
+      } catch (error) {
+        postError(message.clientId, requestId, toBridgeError(error));
+      }
+    };
+
+    const recordToolExecution = async (
+      message: ReturnType<typeof createBridgeEnvelope>,
+    ) => {
+      const sessionId = message.sessionId;
+      if (sessionId === undefined || !isToolExecutionReport(message.payload)) {
+        return;
+      }
+      const payload = message.payload;
+      const settings = await loadSettings();
+      const execution = executionFor(tabId, origin, settings);
+      const key = toolExecutionKey({
+        tabId,
+        clientId: message.clientId,
+        sessionId,
+        runId: payload.runId,
+        toolCallId: payload.toolCallId,
+      });
+      const declarationInputHash = await fingerprintCanonicalJson({
+        declarationHash: payload.declarationHash,
+        inputHash: payload.inputHash,
+      });
+      if (execution.mode === "audit-first" && payload.state === "dispatched") {
+        const authorization = approvedToolCalls.get(key);
+        if (
+          authorization === undefined ||
+          authorization.expiresAt <= Date.now() ||
+          authorization.declarationInputHash !== declarationInputHash
+        ) {
+          await recordAudit(settings, execution, {
+            type: "policy-failure",
+            origin,
+            runId: payload.runId,
+            mode: execution.mode,
+            toolName: payload.toolName,
+            risk: payload.risk,
+            status: "failed",
+            errorCode: "TOOL_APPROVAL_MISMATCH",
+          });
+          return;
+        }
+      }
+      if (
+        payload.state === "completed" ||
+        payload.state === "failed" ||
+        payload.state === "cancelled"
+      ) {
+        approvedToolCalls.delete(key);
+      }
+      await recordAudit(settings, execution, {
+        type: "tool-proposal",
+        origin,
+        runId: payload.runId,
+        mode: execution.mode,
+        toolName: payload.toolName,
+        risk: payload.risk,
+        status: payload.state,
+        ...(payload.durationMs === undefined
+          ? {}
+          : { durationMs: payload.durationMs }),
+      });
+    };
+
     port.onMessage.addListener((value: unknown) => {
       if (isBootstrapMessage(value)) {
         if (value.type !== "hello" || value.direction !== "page-to-extension")
@@ -960,6 +1293,21 @@ export default defineBackground(() => {
         return;
       }
 
+      if (
+        message.type === "tool.approval.request" &&
+        message.requestId !== undefined
+      ) {
+        void executeToolApproval(message);
+        return;
+      }
+
+      if (message.type === "tool.execution.report") {
+        void recordToolExecution(message).catch(() => {
+          // Tool reports never carry content and must not disrupt the page.
+        });
+        return;
+      }
+
       if (message.type === "model.cancel") {
         const target = (
           message.payload as { targetRequestId?: unknown } | undefined
@@ -985,6 +1333,10 @@ export default defineBackground(() => {
         pendingPermissions.delete(key);
       }
       ownedPendingKeys.clear();
+      const prefix = `${tabId}:`;
+      for (const key of approvedToolCalls.keys()) {
+        if (key.startsWith(prefix)) approvedToolCalls.delete(key);
+      }
     });
   });
 
@@ -1002,6 +1354,9 @@ export default defineBackground(() => {
     for (const key of sessionExecution.keys()) {
       if (key.startsWith(prefix)) sessionExecution.delete(key);
     }
+    for (const key of approvedToolCalls.keys()) {
+      if (key.startsWith(prefix)) approvedToolCalls.delete(key);
+    }
   });
 
   browser.runtime.onMessage.addListener(
@@ -1015,13 +1370,13 @@ export default defineBackground(() => {
         return undefined;
       }
       if (value.type === "approval.get") {
-        const pending = pendingProviderApprovals.get(value.approvalId);
+        const pending = pendingApprovals.get(value.approvalId);
         return pending === undefined
           ? { ok: false, error: "This approval expired or was already used." }
           : { ok: true, approval: pending.prompt };
       }
       if (value.type === "approval.decide") {
-        const pending = pendingProviderApprovals.get(value.approvalId);
+        const pending = pendingApprovals.get(value.approvalId);
         if (pending === undefined) {
           return {
             ok: false,

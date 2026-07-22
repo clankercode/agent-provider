@@ -1,5 +1,10 @@
-import { tool, type ToolSet } from "ai";
-import { encodeWireValue, estimateWireBytes } from "@agent-provider/protocol";
+import { asSchema, tool, type ToolSet } from "ai";
+import {
+  encodeWireValue,
+  estimateWireBytes,
+  sha256Canonical,
+  type ToolExecutionReportPayload,
+} from "@agent-provider/protocol";
 import { createAgentProviderId } from "./id.js";
 import type {
   ApprovalRequest,
@@ -84,6 +89,64 @@ export function createToolSet(
         const risk: ToolRisk = definition.risk;
         const startedAt = Date.now();
         const activityId = createAgentProviderId("activity");
+        const runId = context.getRunId();
+        const declarationHash = await sha256Canonical({
+          name,
+          description: definition.description,
+          risk,
+          inputSchema: asSchema(definition.inputSchema).jsonSchema,
+        });
+        const inputHash = await sha256Canonical(input);
+        const report = (state: ToolExecutionReportPayload["state"]): void => {
+          context.extensionAuthority?.report({
+            runId,
+            toolCallId: options.toolCallId,
+            toolName: name,
+            risk,
+            declarationHash,
+            inputHash,
+            state,
+            occurredAt: Date.now(),
+            ...(state === "completed" || state === "failed"
+              ? { durationMs: Date.now() - startedAt }
+              : {}),
+          });
+        };
+        report("queued");
+
+        if (context.extensionAuthority !== undefined) {
+          const extensionDecision =
+            await context.extensionAuthority.requestApproval(
+              {
+                runId,
+                toolCallId: options.toolCallId,
+                toolName: name,
+                risk,
+                declarationHash,
+                inputHash,
+                input: encodeWireValue(input),
+              },
+              options.abortSignal,
+            );
+          if (!extensionDecision.approved) {
+            report("cancelled");
+            emit(context, {
+              id: activityId,
+              startedAt,
+              toolCallId: options.toolCallId,
+              toolName: name,
+              phase: "denied",
+              input,
+              output: { ok: false, denied: true },
+              finishedAt: Date.now(),
+            });
+            return {
+              ok: false,
+              denied: true,
+              message: `The extension denied the ${name} tool call.`,
+            };
+          }
+        }
 
         const approvalLabel = await confirmationLabel(name, definition, input);
         if (approvalLabel !== undefined) {
@@ -108,6 +171,7 @@ export function createToolSet(
             options.abortSignal,
           );
           if (!approved) {
+            report("cancelled");
             emit(context, {
               id: activityId,
               startedAt,
@@ -134,9 +198,9 @@ export function createToolSet(
           phase: "running",
           input,
         });
+        report("dispatched");
 
         try {
-          const runId = context.getRunId();
           const output = await definition.execute(input, {
             toolCallId: options.toolCallId,
             runId,
@@ -161,6 +225,7 @@ export function createToolSet(
             output,
             finishedAt: Date.now(),
           });
+          report("completed");
           return output;
         } catch (error) {
           const message =
@@ -175,6 +240,7 @@ export function createToolSet(
             error: message,
             finishedAt: Date.now(),
           });
+          report("failed");
           throw error;
         }
       },

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { browser } from "wxt/browser";
+import { decodeWireValue } from "@agent-provider/protocol";
 import {
   AGENT_PROVIDER_UI_MARKER,
+  type ApprovalPrompt,
   type PopupResponse,
   type PopupStatus,
-  type ProviderApprovalPrompt,
 } from "../../lib/ui-messages.js";
 
 type PermissionDecision = "grant-session" | "grant-persistent" | "deny";
@@ -49,9 +50,7 @@ async function sendPermission(
   return response.status;
 }
 
-async function getProviderApproval(
-  approvalId: string,
-): Promise<ProviderApprovalPrompt> {
+async function getApproval(approvalId: string): Promise<ApprovalPrompt> {
   const response = (await browser.runtime.sendMessage({
     marker: AGENT_PROVIDER_UI_MARKER,
     type: "approval.get",
@@ -63,7 +62,7 @@ async function getProviderApproval(
   return response.approval;
 }
 
-async function decideProvider(
+async function decideApproval(
   approvalId: string,
   decision: "approved" | "denied",
 ): Promise<void> {
@@ -81,8 +80,7 @@ async function decideProvider(
 export function ApprovalApp() {
   const details = requestDetails();
   const [status, setStatus] = useState<PopupStatus>();
-  const [providerApproval, setProviderApproval] =
-    useState<ProviderApprovalPrompt>();
+  const [approval, setApproval] = useState<ApprovalPrompt>();
   const [busy, setBusy] = useState(false);
   const [finished, setFinished] = useState<FinishedDecision>();
   const [error, setError] = useState<string>();
@@ -95,7 +93,7 @@ export function ApprovalApp() {
           : Promise.reject(
               new Error("This permission request is invalid or has expired."),
             )
-        : getProviderApproval(details.approvalId).then(setProviderApproval);
+        : getApproval(details.approvalId).then(setApproval);
     void load.catch((cause) =>
       setError(cause instanceof Error ? cause.message : String(cause)),
     );
@@ -111,7 +109,7 @@ export function ApprovalApp() {
     setError(undefined);
     try {
       if (details.approvalId !== undefined) {
-        await decideProvider(
+        await decideApproval(
           details.approvalId,
           decision === "approved" ? "approved" : "denied",
         );
@@ -143,7 +141,7 @@ export function ApprovalApp() {
         <h1>{denied ? "Request denied" : "Request allowed"}</h1>
         <p className="lede">
           {finished === "approved"
-            ? "This single model request may now dispatch. The approval cannot be reused."
+            ? "This single step may now continue. The approval cannot be reused."
             : finished === "grant-persistent"
               ? "This origin can use your configured model aliases until you revoke it."
               : finished === "grant-session"
@@ -161,8 +159,11 @@ export function ApprovalApp() {
     );
   }
 
-  const providerPrompt = providerApproval !== undefined;
-  const origin = providerApproval?.origin ?? details.origin;
+  const extensionPrompt = approval !== undefined;
+  const providerPrompt = approval?.kind === "provider";
+  const toolPrompt = approval?.kind === "tool";
+  const origin = approval?.origin ?? details.origin;
+
   return (
     <main className="approval-shell">
       <header>
@@ -183,16 +184,20 @@ export function ApprovalApp() {
           <p className="kicker">
             {providerPrompt
               ? "Provider dispatch approval"
-              : "Page access request"}
+              : toolPrompt
+                ? "Tool callback approval"
+                : "Page access request"}
           </p>
           <h1>
             {providerPrompt
               ? "Send this model request?"
-              : "Let this origin use your model?"}
+              : toolPrompt
+                ? `Run ${approval.toolName}?`
+                : "Let this origin use your model?"}
           </h1>
           <p className="lede">
-            {providerPrompt
-              ? "Audit-first mode pauses every dispatch here. This approval applies once and expires automatically."
+            {extensionPrompt
+              ? "Audit-first pauses every provider and tool step here. This approval applies once and expires automatically."
               : "The page will receive model output through Agent Provider. Your API key remains inside extension storage."}
           </p>
 
@@ -201,7 +206,7 @@ export function ApprovalApp() {
             <code>{origin || "Unknown origin"}</code>
           </div>
 
-          {!providerPrompt && details.reason ? (
+          {!extensionPrompt && details.reason ? (
             <blockquote>
               <span>Page-provided reason</span>
               {details.reason}
@@ -210,17 +215,25 @@ export function ApprovalApp() {
 
           <dl>
             <div>
-              <dt>{providerPrompt ? "Model alias" : "Model aliases"}</dt>
+              <dt>
+                {providerPrompt
+                  ? "Model alias"
+                  : toolPrompt
+                    ? "Declared risk"
+                    : "Model aliases"}
+              </dt>
               <dd>
-                {providerApproval?.alias ??
-                  status?.aliases.join(", ") ??
-                  "Configured aliases"}
+                {providerPrompt
+                  ? approval.alias
+                  : toolPrompt
+                    ? approval.risk
+                    : status?.aliases.join(", ") || "Configured aliases"}
               </dd>
             </div>
             <div>
-              <dt>{providerPrompt ? "Execution mode" : "Provider"}</dt>
+              <dt>{extensionPrompt ? "Execution mode" : "Provider"}</dt>
               <dd>
-                {providerPrompt
+                {extensionPrompt
                   ? "Audit-first · single use"
                   : status?.providerConfigured
                     ? "Ready"
@@ -228,38 +241,51 @@ export function ApprovalApp() {
               </dd>
             </div>
             <div>
-              <dt>{providerPrompt ? "Request size" : "Credentials"}</dt>
+              <dt>
+                {providerPrompt
+                  ? "Request size"
+                  : toolPrompt
+                    ? "Normalized input"
+                    : "Credentials"}
+              </dt>
               <dd>
                 {providerPrompt
-                  ? `${providerApproval.requestBytes.toLocaleString()} bytes`
-                  : "Never exposed to page code"}
+                  ? `${approval.requestBytes.toLocaleString()} bytes`
+                  : toolPrompt
+                    ? "Shown below"
+                    : "Never exposed to page code"}
               </dd>
             </div>
           </dl>
+
+          {toolPrompt ? (
+            <pre className="tool-input">
+              {JSON.stringify(decodeWireValue(approval.input), null, 2)}
+            </pre>
+          ) : null}
         </div>
 
         <aside>
           <p className="kicker">
-            {providerPrompt ? "One-time decision" : "Choose scope"}
+            {extensionPrompt ? "One-time decision" : "Choose scope"}
           </p>
           <button
             className="primary"
             disabled={
-              busy ||
-              (providerPrompt ? !providerApproval : !details.permissionValid)
+              busy || (extensionPrompt ? !approval : !details.permissionValid)
             }
             onClick={() =>
-              void decide(providerPrompt ? "approved" : "grant-session")
+              void decide(extensionPrompt ? "approved" : "grant-session")
             }
           >
-            <span>{providerPrompt ? "Allow once" : "Allow this tab"}</span>
+            <span>{extensionPrompt ? "Allow once" : "Allow this tab"}</span>
             <small>
-              {providerPrompt
-                ? "Consumed by this dispatch"
+              {extensionPrompt
+                ? "Consumed by this step"
                 : "Ends when the tab closes"}
             </small>
           </button>
-          {!providerPrompt ? (
+          {!extensionPrompt ? (
             <button
               className="secondary"
               disabled={busy || !details.permissionValid}
@@ -272,8 +298,7 @@ export function ApprovalApp() {
           <button
             className="deny"
             disabled={
-              busy ||
-              (providerPrompt ? !providerApproval : !details.permissionValid)
+              busy || (extensionPrompt ? !approval : !details.permissionValid)
             }
             onClick={() => void decide("deny")}
           >
@@ -282,7 +307,9 @@ export function ApprovalApp() {
           <p className="boundary">
             {providerPrompt
               ? "Prompt content remains on the page; this surface shows authority metadata only."
-              : "Trust applies to the entire origin, including every script it runs."}
+              : toolPrompt
+                ? "Tool input is shown for this decision and is not retained in the metadata audit."
+                : "Trust applies to the entire origin, including every script it runs."}
           </p>
         </aside>
       </section>

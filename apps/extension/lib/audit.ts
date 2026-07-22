@@ -20,7 +20,13 @@ export interface AuditEvent {
   mode?: BaseExecutionMode;
   grantScope?: "session" | "persistent";
   decision?: "allowed" | "denied" | "cancelled" | "expired";
-  status?: "queued" | "dispatched" | "completed" | "failed" | "outcome-unknown";
+  status?:
+    | "queued"
+    | "dispatched"
+    | "cancelled"
+    | "completed"
+    | "failed"
+    | "outcome-unknown";
   toolName?: string;
   risk?: "read" | "write" | "destructive";
   errorCode?: string;
@@ -60,6 +66,7 @@ const DECISIONS = new Set([
 const STATUSES = new Set([
   "queued",
   "dispatched",
+  "cancelled",
   "completed",
   "failed",
   "outcome-unknown",
@@ -143,6 +150,7 @@ export function createAuditEvent(value: unknown): AuditEvent {
           status: value.status as
             | "queued"
             | "dispatched"
+            | "cancelled"
             | "completed"
             | "failed"
             | "outcome-unknown",

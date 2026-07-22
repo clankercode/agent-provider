@@ -82,4 +82,46 @@ describe("createToolSet", () => {
     expect(approvals).toBe(1);
     expect(observedIdempotencyKey).toBe("run-safe:call-9");
   });
+
+  it("binds extension approval to declaration and input before every callback", async () => {
+    let executed = false;
+    const reports: string[] = [];
+    const tools = createToolSet(
+      {
+        read_record: {
+          description: "Read a record.",
+          inputSchema: z.object({ id: z.string() }),
+          risk: "read",
+          execute: () => {
+            executed = true;
+            return { ok: true };
+          },
+        },
+      },
+      {
+        approvals: { request: () => Promise.resolve(true) },
+        extensionAuthority: {
+          requestApproval: (request) => {
+            expect(request.declarationHash).toMatch(/^[a-f0-9]{64}$/);
+            expect(request.inputHash).toMatch(/^[a-f0-9]{64}$/);
+            expect(request.input).toEqual({ id: "A-17" });
+            return Promise.resolve({ approved: false, reason: "denied" });
+          },
+          report: (report) => reports.push(report.state),
+        },
+        onActivity: () => {},
+        getRunId: () => "run-audit",
+      },
+    );
+
+    const execute = tools.read_record?.execute as unknown as (
+      input: { id: string },
+      options: { toolCallId: string; messages: [] },
+    ) => Promise<unknown>;
+    await expect(
+      execute({ id: "A-17" }, { toolCallId: "call-audit", messages: [] }),
+    ).resolves.toMatchObject({ denied: true });
+    expect(executed).toBe(false);
+    expect(reports).toEqual(["queued", "cancelled"]);
+  });
 });

@@ -1,6 +1,8 @@
 import type {
   PermissionDecision,
   PermissionState,
+  ToolRisk,
+  WireValue,
 } from "@agent-provider/protocol";
 import type { AuditEvent } from "./audit.js";
 import type { BaseExecutionMode } from "./policy-resolution.js";
@@ -79,6 +81,18 @@ export interface ProviderApprovalPrompt {
   expiresAt: number;
 }
 
+export interface ToolApprovalPrompt {
+  id: string;
+  kind: "tool";
+  origin: string;
+  toolName: string;
+  risk: ToolRisk;
+  input: WireValue;
+  expiresAt: number;
+}
+
+export type ApprovalPrompt = ProviderApprovalPrompt | ToolApprovalPrompt;
+
 export interface AuditView {
   session: AuditEvent[];
   persistent: AuditEvent[];
@@ -88,7 +102,7 @@ export interface AuditView {
 export interface PopupResponse {
   ok: boolean;
   status?: PopupStatus;
-  approval?: ProviderApprovalPrompt;
+  approval?: ApprovalPrompt;
   audit?: AuditView;
   deleted?: number;
   error?: string;

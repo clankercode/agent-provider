@@ -10,6 +10,11 @@ import type {
   AgentProviderBridge,
 } from "@agent-provider/ai-sdk";
 import type { ContextFrame, PageContext } from "@agent-provider/context";
+import type {
+  ToolApprovalRequestPayload,
+  ToolApprovalResultPayload,
+  ToolExecutionReportPayload,
+} from "@agent-provider/protocol";
 
 export type ToolRisk = "read" | "write" | "destructive";
 
@@ -180,6 +185,13 @@ export interface ToolWrapperContext {
   };
   onActivity: (activity: ToolActivity) => void;
   getRunId: () => string;
+  extensionAuthority?: {
+    requestApproval: (
+      request: ToolApprovalRequestPayload,
+      signal?: AbortSignal,
+    ) => Promise<ToolApprovalResultPayload>;
+    report: (report: ToolExecutionReportPayload) => void;
+  };
 }
 
 export type AnyToolExecutionOptions = ToolExecutionOptions<unknown>;

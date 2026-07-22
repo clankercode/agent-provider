@@ -17,6 +17,9 @@ import {
   type ModelRequestPayload,
   type PageToExtensionMessage,
   type PermissionRequestPayload,
+  type ToolApprovalRequestPayload,
+  type ToolApprovalResultPayload,
+  type ToolExecutionReportPayload,
   type WireValue,
 } from "@agent-provider/protocol";
 import { createAbortError, AgentProviderBridgeError } from "./errors.js";
@@ -229,6 +232,33 @@ export class AgentProviderBridge {
     return { stream };
   }
 
+  async requestToolApproval(
+    payload: ToolApprovalRequestPayload,
+    abortSignal?: AbortSignal,
+  ): Promise<ToolApprovalResultPayload> {
+    await this.connect();
+    return this.sendSingle<ToolApprovalResultPayload>(
+      "tool.approval.request",
+      payload,
+      abortSignal,
+    );
+  }
+
+  reportToolExecution(payload: ToolExecutionReportPayload): void {
+    if (this.disposed || this.sessionId === undefined) return;
+    this.post(
+      createBridgeEnvelope({
+        direction: "page-to-extension",
+        clientId: this.clientId,
+        sessionId: this.sessionId,
+        type: "tool.execution.report",
+        runId: payload.runId,
+        toolCallId: payload.toolCallId,
+        payload,
+      }) as PageToExtensionMessage,
+    );
+  }
+
   dispose(): void {
     if (this.disposed) {
       return;
@@ -256,7 +286,8 @@ export class AgentProviderBridge {
       | "session.open"
       | "permission.query"
       | "permission.request"
-      | "model.generate",
+      | "model.generate"
+      | "tool.approval.request",
     payload?: unknown,
     abortSignal?: AbortSignal,
     timeoutMs = this.requestTimeoutMs,
@@ -415,6 +446,9 @@ export class AgentProviderBridge {
       } else if (message.type === "model.result") {
         this.clearPending(requestId, pending);
         pending.resolve(decodeWireValue(message.payload as WireValue));
+      } else if (message.type === "tool.approval.result") {
+        this.clearPending(requestId, pending);
+        pending.resolve(message.payload);
       }
       return;
     }

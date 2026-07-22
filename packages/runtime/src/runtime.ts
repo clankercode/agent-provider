@@ -118,6 +118,15 @@ export class AgentProviderRuntime {
       approvals: this.approvalManager,
       onActivity: (activity) => this.recordActivity(activity),
       getRunId: () => this.activeRunId ?? "run-unavailable",
+      ...(this.bridge === undefined
+        ? {}
+        : {
+            extensionAuthority: {
+              requestApproval: (request, signal) =>
+                this.bridge!.requestToolApproval(request, signal),
+              report: (report) => this.bridge!.reportToolExecution(report),
+            },
+          }),
     });
 
     this.agent = new ToolLoopAgent({
