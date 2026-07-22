@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { browser } from "wxt/browser";
 import {
   DEFAULT_SETTINGS,
@@ -162,6 +162,7 @@ export function OptionsApp() {
   const [modelCatalogs, setModelCatalogs] = useState<
     Record<string, ModelCatalogState>
   >({});
+  const modelCatalogRequests = useRef(new Map<string, AbortController>());
   const [audit, setAudit] = useState<AuditView>();
   const [auditOrigin, setAuditOrigin] = useState<string | undefined>(
     initialAuditOrigin === null ? undefined : initialAuditOrigin,
@@ -180,6 +181,16 @@ export function OptionsApp() {
       .catch(() => undefined);
   }, []);
 
+  useEffect(
+    () => () => {
+      for (const request of modelCatalogRequests.current.values()) {
+        request.abort();
+      }
+      modelCatalogRequests.current.clear();
+    },
+    [],
+  );
+
   const dirty =
     savedSnapshot !== undefined &&
     settingsSnapshot(settings, aliasesText) !== savedSnapshot;
@@ -197,6 +208,13 @@ export function OptionsApp() {
 
   useEffect(() => {
     if (dirty && savePhase === "saved") setSavePhase("idle");
+  }, [dirty, savePhase]);
+
+  useEffect(() => {
+    if (!dirty && savePhase === "error") {
+      setError(undefined);
+      setSavePhase("idle");
+    }
   }, [dirty, savePhase]);
 
   async function deleteAudit() {
@@ -234,6 +252,8 @@ export function OptionsApp() {
   }
 
   function clearModelCatalog(id: string) {
+    modelCatalogRequests.current.get(id)?.abort();
+    modelCatalogRequests.current.delete(id);
     setModelCatalogs((current) => {
       if (current[id] === undefined) return current;
       const next = { ...current };
@@ -243,6 +263,9 @@ export function OptionsApp() {
   }
 
   async function pullModels(id: string, profile: ProviderProfile) {
+    modelCatalogRequests.current.get(id)?.abort();
+    const controller = new AbortController();
+    modelCatalogRequests.current.set(id, controller);
     setModelCatalogs((current) => ({
       ...current,
       [id]: { phase: "loading", models: [] },
@@ -256,7 +279,10 @@ export function OptionsApp() {
           endpoint: profile.endpoint,
         },
       });
-      const models = await listProviderModels(profile);
+      const models = await listProviderModels(profile, {
+        signal: controller.signal,
+      });
+      if (modelCatalogRequests.current.get(id) !== controller) return;
       setModelCatalogs((current) => ({
         ...current,
         [id]: {
@@ -266,6 +292,12 @@ export function OptionsApp() {
         },
       }));
     } catch (cause) {
+      if (
+        controller.signal.aborted ||
+        modelCatalogRequests.current.get(id) !== controller
+      ) {
+        return;
+      }
       setModelCatalogs((current) => ({
         ...current,
         [id]: {
@@ -274,6 +306,10 @@ export function OptionsApp() {
           message: cause instanceof Error ? cause.message : String(cause),
         },
       }));
+    } finally {
+      if (modelCatalogRequests.current.get(id) === controller) {
+        modelCatalogRequests.current.delete(id);
+      }
     }
   }
 

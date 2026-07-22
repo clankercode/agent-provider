@@ -7,10 +7,7 @@ highest-priority ready item that is not blocked.
 
 ## In progress
 
-- **P1 — Visual review and fix:** finish pixel and source-geometry review of
-  the reduced-green extension palette and the settings/model-discovery states.
-- **P1 — Release verification:** run the full check and browser suites, update
-  release documentation, and commit the completed enhancement slice.
+No ready work is currently in progress.
 
 ## Completed on 2026-07-23
 
@@ -27,6 +24,14 @@ highest-priority ready item that is not blocked.
   separation from the page.
 - **P2 — Audit rendering:** deduplicate session/persistent events before React
   rendering so mirrored ledger events do not produce duplicate keys.
+- **P1 — Visual review and fix:** complete four rendered desktop/mobile and
+  light/dark review passes of the reduced-green extension palette and the
+  settings/model-discovery states.
+- **P1 — Settings state hardening:** cancel stale model-catalog requests when a
+  profile changes or is removed, and dismiss save errors when edits are fully
+  reverted.
+- **P1 — Release verification:** pass the full repository check, Chrome browser
+  integration, Firefox lint/runtime smoke, and extension UI capture suites.
 
 Longer-term accepted deferrals remain in
 [`FUTURE-CONCERNS.md`](FUTURE-CONCERNS.md); they do not become active solely by
