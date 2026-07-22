@@ -1,6 +1,9 @@
 # Agent Provider implementation plan
 
-Status: accepted and in progress on 2026-07-23.
+Status: implemented as a release candidate on 2026-07-23. External publication
+and the deliberately deferred verification matrix are tracked in
+[`docs/IMPLEMENTATION-STATUS.md`](../../docs/IMPLEMENTATION-STATUS.md) and
+[`docs/FUTURE-CONCERNS.md`](../../docs/FUTURE-CONCERNS.md).
 
 ## Goal
 

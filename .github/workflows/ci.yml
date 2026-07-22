@@ -18,13 +18,26 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run test:packages
+      - name: Chrome extension smoke
+        run: |
+          CHROMIUM_PATH="$(command -v google-chrome || command -v chromium)"
+          export CHROMIUM_PATH
+          xvfb-run -a npm run test:browser
+      - name: Firefox extension smoke and lint
+        run: |
+          FIREFOX_PATH="$(command -v firefox)"
+          export FIREFOX_PATH
+          npm run test:firefox
       - run: npm sbom --sbom-format cyclonedx > agent-provider.sbom.json
+      - run: npm run package:stores
       - uses: actions/upload-artifact@v4
         with:
           name: agent-provider-builds
           path: |
             apps/extension/.output/**
             agent-provider.sbom.json
+            release/**
 
   safari-best-effort:
     continue-on-error: true

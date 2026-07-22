@@ -5,8 +5,9 @@ without owning the user's model credentials. The application supplies context
 and callbacks; a browser extension supplies exact-origin, policy-constrained
 access to a user-configured model provider.
 
-This repository is an active alpha. Chrome is the required browser and Firefox
-is the parity target. Safari is not currently supported. See
+This repository is a release candidate for bounded, user-owned deployments.
+Chrome is the required browser, Firefox has build and runtime-smoke parity, and
+Safari is not currently supported. It is not yet a signed store release. See
 [implementation status](docs/IMPLEMENTATION-STATUS.md) before deployment.
 
 ## Workspace
@@ -40,11 +41,11 @@ Provider credentials are configured in the extension, never in page code.
 Expected provider, policy, permission, cancellation, and bridge failures are
 returned as structured outcomes.
 
-The current alpha enforces exact-origin consent, alias authority fingerprints,
-per-call size/token/concurrency/time limits, provider destination checks, and
-result scrubbing. Durable quotas, audit-first/private execution, persistent
-audit controls, and extension approval for each model/tool step remain explicit
-production blockers rather than implicit promises.
+The current implementation enforces exact-origin consent, alias authority
+fingerprints, durable per-origin quotas, audit-first/private execution,
+single-use extension approval, provider destination checks, result scrubbing,
+and bounded metadata-only audit controls. Remaining release gates are recorded
+explicitly rather than implied by the implementation.
 
 ## Security model
 

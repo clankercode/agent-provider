@@ -13,8 +13,8 @@ trusts every script capable of executing on the exact origin.
 
 ## Required controls
 
-This section is the target security contract. The alpha does not yet enforce
-every item; the precise gap list is maintained in
+This section is the target security contract. The release candidate enforces
+these controls; the remaining verification and lifecycle gaps are maintained in
 [implementation status](IMPLEMENTATION-STATUS.md) and
 [future concerns](FUTURE-CONCERNS.md).
 
@@ -54,6 +54,12 @@ every item; the precise gap list is maintained in
 - Cancellation after dispatch is best effort; `outcome-unknown` requires
   provider or application reconciliation.
 - Provider privacy and retention are governed by the user's provider account.
-- The current alpha does not yet wire durable quotas, audit-first/private mode,
-  persistent audit UI, or per-step extension approvals into the background
-  request lifecycle.
+- Browser-worker restart conservatively accounts for dispatched model work, but
+  the short-lived tool execution-report correlation map is not durable. A tool
+  callback that outlives a worker restart may be reported as unknown rather than
+  completed in extension audit.
+- Custom HTTPS bridge activation is user-mediated and exact-origin, but its
+  browser permission gesture is not yet covered by an automated end-to-end
+  scenario.
+- The security review was single-agent; independent review remains a release
+  hardening recommendation.

@@ -1,40 +1,39 @@
 # Future concerns and explicit stubs
 
-This is the durable queue for work intentionally deferred from the current
-alpha. The order reflects safety and delivery impact.
+This is the durable queue for work intentionally deferred from the release
+candidate. The order reflects safety and delivery impact.
 
 ## P0: required before a production claim
 
-1. Wire `QuotaLedger` around every background provider dispatch. Persist
-   per-origin settled usage safely across MV3 worker restarts, reserve the
-   maximum authorized output before dispatch, settle normalized provider usage,
-   and reconcile unknown outcomes without replay.
-2. Add protocol and background state for `standard | audit-first` plus
-   orthogonal private sessions. Audit-first must require extension-owned,
-   single-use approval before every provider request and proposed tool callback.
-3. Wire `AuditRecorder` and its IndexedDB store to permission, model, tool,
-   policy, bridge, setting, and deletion events. Add origin/global inspection,
-   persistent opt-in, private-mode exclusion, deletion, and visible write-failure
-   state to extension UI.
-4. Bind page tool execution reports to extension approvals and canonical
-   declaration/schema/input hashes. Mutation callbacks must continue to require
-   page-native application approval independently.
-5. Add integrated browser tests for grant/deny/revoke, live generation and
-   streaming through the extension, cancellation, timeout, navigation,
-   disconnect, service-worker restart, and outcome-unknown no-replay behavior.
-6. Complete a focused extension/application security review and dependency
-   update-chain review after these lifecycle controls are wired.
+1. Publish the privacy policy with a real support contact, finish Chrome Web
+   Store and AMO declarations, and complete publisher signing/submission.
+2. Add integrated browser scenarios for model/tool approval denial, timeout,
+   and cancellation; navigation and bridge disconnect during dispatch; forced
+   service-worker restart; and unknown-outcome no-replay reconciliation. The
+   underlying seams are tested, but FR-21 asks for the complete integrated
+   matrix.
+3. Persist in-flight tool execution authorization if browser-worker restart
+   reconciliation must distinguish an eventually completed callback from an
+   unknown result. Current model quota reservations survive restart; the
+   short-lived tool-report correlation map does not.
+4. Automate popup-driven exact custom HTTPS host activation/revocation. Browser
+   APIs require a user gesture, so the current release documents and implements
+   the flow but tests the allowlist/permission seams below full browser level.
+5. Complete an independent security review after any material protocol,
+   provider, permission, or store-manifest change. The current review was
+   attack-led but intentionally single-agent.
 
 ## P1: release and parity work
 
-- Run the browser smoke suite in Firefox rather than relying on a clean build.
-- Add packed consumer tests for headless, React, advanced AI SDK, and WebMCP
-  imports, then publish/sign browser and npm artifacts.
+- Extend Firefox automation from a real MV3 bridge smoke to the Chrome suite's
+  provider, grant, audit, and control-surface coverage.
+- Confirm npm scope ownership, publish all six package tarballs, and repeat the
+  packed-consumer smoke against the registry artifacts.
 - Add a separately authorized Gemini live smoke; current Gemini verification is
   fixture-only.
 - Add managed policy as a tightening-only layer when a deployment needs it.
-- Finalize provider terms, privacy disclosures, product naming, store metadata,
-  extension IDs, and signing credentials.
+- Add automated accessibility checks and a second-browser visual regression
+  pass for the extension control surfaces.
 
 ## Deliberately unsupported
 
