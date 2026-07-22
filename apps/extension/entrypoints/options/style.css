@@ -263,6 +263,22 @@ button:disabled {
   color: var(--muted);
   font-size: 12px;
 }
+.audit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.audit-origins {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.audit-origins button {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .audit-list {
   display: grid;
   gap: 0;

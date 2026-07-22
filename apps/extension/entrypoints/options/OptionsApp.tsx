@@ -17,10 +17,11 @@ import {
   type PopupResponse,
 } from "../../lib/ui-messages.js";
 
-async function readAudit(): Promise<AuditView> {
+async function readAudit(origin?: string): Promise<AuditView> {
   const response = (await browser.runtime.sendMessage({
     marker: AGENT_PROVIDER_UI_MARKER,
     type: "audit.query",
+    ...(origin === undefined ? {} : { origin }),
   })) as PopupResponse;
   if (!response.ok || response.audit === undefined) {
     throw new Error(response.error ?? "The audit ledger is unavailable.");
@@ -29,6 +30,7 @@ async function readAudit(): Promise<AuditView> {
 }
 
 export function OptionsApp() {
+  const initialAuditOrigin = new URLSearchParams(location.search).get("origin");
   const [settings, setSettings] = useState<AgentProviderExtensionSettings>(() =>
     structuredClone(DEFAULT_SETTINGS),
   );
@@ -37,6 +39,10 @@ export function OptionsApp() {
   const [status, setStatus] = useState("Loading…");
   const [error, setError] = useState<string>();
   const [audit, setAudit] = useState<AuditView>();
+  const [auditOrigin, setAuditOrigin] = useState<string | undefined>(
+    initialAuditOrigin === null ? undefined : initialAuditOrigin,
+  );
+  const [confirmAuditDelete, setConfirmAuditDelete] = useState(false);
 
   useEffect(() => {
     void loadSettings().then((loaded) => {
@@ -44,7 +50,7 @@ export function OptionsApp() {
       setAliasesText(JSON.stringify(loaded.aliases, null, 2));
       setStatus("Ready");
     });
-    void readAudit()
+    void readAudit(initialAuditOrigin ?? undefined)
       .then(setAudit)
       .catch(() => undefined);
   }, []);
@@ -53,11 +59,13 @@ export function OptionsApp() {
     const response = (await browser.runtime.sendMessage({
       marker: AGENT_PROVIDER_UI_MARKER,
       type: "audit.delete",
+      ...(auditOrigin === undefined ? {} : { origin: auditOrigin }),
     })) as PopupResponse;
     if (!response.ok) {
       throw new Error(response.error ?? "The audit ledger was not deleted.");
     }
-    setAudit(await readAudit());
+    setAudit(await readAudit(auditOrigin));
+    setConfirmAuditDelete(false);
   }
 
   async function submit(event: FormEvent) {
@@ -115,6 +123,14 @@ export function OptionsApp() {
       return { ...current, profiles };
     });
   }
+
+  const auditOrigins = [
+    ...new Set(
+      [...(audit?.persistent ?? []), ...(audit?.session ?? [])].flatMap(
+        (event) => (event.origin === undefined ? [] : [event.origin]),
+      ),
+    ),
+  ].sort();
 
   return (
     <main>
@@ -494,6 +510,7 @@ export function OptionsApp() {
                 }
               />
               Keep metadata-only audit between restarts
+              <small>Default for sites without a popup override.</small>
             </label>
             <label className="check">
               <input
@@ -572,24 +589,91 @@ export function OptionsApp() {
 
           <div className="audit-heading">
             <div>
-              <strong>Metadata ledger</strong>
+              <strong>
+                {auditOrigin === undefined ? "Metadata ledger" : "Site ledger"}
+              </strong>
               <span>
                 {audit === undefined
                   ? "Loading…"
                   : `${audit.session.length} session · ${audit.persistent.length} persistent`}
               </span>
+              {auditOrigin === undefined ? null : <code>{auditOrigin}</code>}
             </div>
-            <button
-              className="danger-link"
-              type="button"
-              disabled={audit === undefined || audit.persistent.length === 0}
-              onClick={() =>
-                void deleteAudit().catch((cause) => setError(String(cause)))
-              }
-            >
-              Delete persistent audit
-            </button>
+            <div className="audit-actions">
+              {auditOrigin === undefined ? null : (
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => {
+                    setAuditOrigin(undefined);
+                    setConfirmAuditDelete(false);
+                    history.replaceState(null, "", location.pathname);
+                    void readAudit().then(setAudit);
+                  }}
+                >
+                  View all origins
+                </button>
+              )}
+              {confirmAuditDelete ? (
+                <>
+                  <button
+                    className="danger-link"
+                    type="button"
+                    onClick={() =>
+                      void deleteAudit().catch((cause) =>
+                        setError(String(cause)),
+                      )
+                    }
+                  >
+                    Confirm delete
+                  </button>
+                  <button
+                    className="secondary"
+                    type="button"
+                    onClick={() => setConfirmAuditDelete(false)}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="danger-link"
+                  type="button"
+                  disabled={
+                    audit === undefined || audit.persistent.length === 0
+                  }
+                  onClick={() => setConfirmAuditDelete(true)}
+                >
+                  {auditOrigin === undefined
+                    ? "Delete all persistent audit"
+                    : "Delete this site’s audit"}
+                </button>
+              )}
+            </div>
           </div>
+          {auditOrigin === undefined && auditOrigins.length > 0 ? (
+            <nav className="audit-origins" aria-label="Audit origins">
+              {auditOrigins.map((origin) => (
+                <button
+                  className="secondary"
+                  type="button"
+                  key={origin}
+                  onClick={() => {
+                    setAuditOrigin(origin);
+                    setConfirmAuditDelete(false);
+                    history.replaceState(
+                      null,
+                      "",
+                      `${location.pathname}?origin=${encodeURIComponent(origin)}`,
+                    );
+                    void readAudit(origin).then(setAudit);
+                  }}
+                >
+                  {origin}
+                </button>
+              ))}
+            </nav>
+          ) : null}
           <ol className="audit-list">
             {[...(audit?.persistent ?? []), ...(audit?.session ?? [])]
               .sort((left, right) => right.timestamp - left.timestamp)

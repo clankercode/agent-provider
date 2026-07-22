@@ -43,6 +43,7 @@ export interface AgentProviderExtensionSettings {
   };
   audit: {
     persistentEnabled: boolean;
+    originOverrides: Record<string, boolean>;
     requirePersistent: boolean;
     retention: AuditRetention;
   };
@@ -81,11 +82,12 @@ export const DEFAULT_SETTINGS: AgentProviderExtensionSettings = {
   },
   audit: {
     persistentEnabled: false,
+    originOverrides: {},
     requirePersistent: false,
     retention: {
-      maxAgeMs: 7 * 24 * 60 * 60 * 1_000,
-      maxEvents: 2_000,
-      maxBytes: 2 * 1024 * 1024,
+      maxAgeMs: HARD_AUDIT_RETENTION.maxAgeMs,
+      maxEvents: HARD_AUDIT_RETENTION.maxEvents,
+      maxBytes: HARD_AUDIT_RETENTION.maxBytes,
     },
   },
   quotas: {
@@ -129,6 +131,33 @@ const PROVIDER_FAMILIES = new Set<ProviderFamily>([
 
 function boundedString(value: unknown, maximum: number): string {
   return typeof value === "string" ? value.trim().slice(0, maximum) : "";
+}
+
+function normalizeAuditOriginOverrides(
+  value: unknown,
+): Record<string, boolean> {
+  if (!isRecord(value)) return {};
+  const overrides: Record<string, boolean> = {};
+  for (const [origin, enabled] of Object.entries(value).slice(0, 500)) {
+    try {
+      if (new URL(origin).origin === origin && typeof enabled === "boolean") {
+        overrides[origin] = enabled;
+      }
+    } catch {
+      // Ignore malformed origins instead of broadening audit persistence.
+    }
+  }
+  return overrides;
+}
+
+export function persistentAuditEnabled(
+  settings: AgentProviderExtensionSettings,
+  origin: string | undefined,
+): boolean {
+  if (origin !== undefined && origin in settings.audit.originOverrides) {
+    return settings.audit.originOverrides[origin]!;
+  }
+  return settings.audit.persistentEnabled;
 }
 
 function authorityOptions(
@@ -294,6 +323,7 @@ export function normalizeSettings(
       persistentEnabled:
         rawAudit.persistentEnabled === true ||
         rawAudit.requirePersistent === true,
+      originOverrides: normalizeAuditOriginOverrides(rawAudit.originOverrides),
       requirePersistent: rawAudit.requirePersistent === true,
       retention: tightenAuditRetention({
         maxAgeMs: numberInRange(

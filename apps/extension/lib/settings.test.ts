@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeSettings } from "./settings.js";
+import { normalizeSettings, persistentAuditEnabled } from "./settings.js";
 
 describe("extension provider settings", () => {
   it("canonicalizes the legacy endpoint while preserving reviewed defaults", () => {
@@ -68,6 +68,11 @@ describe("extension provider settings", () => {
       audit: {
         persistentEnabled: false,
         requirePersistent: true,
+        originOverrides: {
+          "https://enabled.example": true,
+          "https://disabled.example": false,
+          "not an origin": true,
+        },
         retention: {
           maxAgeMs: Number.MAX_SAFE_INTEGER,
           maxEvents: 500,
@@ -88,6 +93,19 @@ describe("extension provider settings", () => {
     });
     expect(settings.audit.persistentEnabled).toBe(true);
     expect(settings.audit.requirePersistent).toBe(true);
+    expect(settings.audit.originOverrides).toEqual({
+      "https://enabled.example": true,
+      "https://disabled.example": false,
+    });
+    expect(persistentAuditEnabled(settings, "https://enabled.example")).toBe(
+      true,
+    );
+    expect(persistentAuditEnabled(settings, "https://disabled.example")).toBe(
+      false,
+    );
+    expect(persistentAuditEnabled(settings, "https://other.example")).toBe(
+      true,
+    );
     expect(settings.audit.retention.maxAgeMs).toBeLessThan(
       Number.MAX_SAFE_INTEGER,
     );

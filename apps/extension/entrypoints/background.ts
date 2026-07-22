@@ -58,6 +58,8 @@ import {
 import {
   loadSettings,
   lockStorageToExtensionContexts,
+  persistentAuditEnabled,
+  saveSettings,
   type AgentProviderExtensionSettings,
 } from "../lib/settings.js";
 import {
@@ -142,12 +144,15 @@ async function recordAudit(
     { ...event, timestamp: Date.now() },
     {
       privateMode: execution.privateMode,
-      persistentEnabled: settings.audit.persistentEnabled,
+      persistentEnabled: persistentAuditEnabled(settings, event.origin),
       requirePersistentAudit: settings.audit.requirePersistent,
       retention: settings.audit.retention,
     },
   );
-  if (settings.audit.persistentEnabled && !execution.privateMode) {
+  if (
+    persistentAuditEnabled(settings, event.origin) &&
+    !execution.privateMode
+  ) {
     persistentAuditError = result.persistentError;
   }
 }
@@ -161,6 +166,13 @@ function usageTokens(
   const output = usage.outputTokens.total;
   if (input === undefined && output === undefined) return fallback;
   return Math.max(0, input ?? 0) + Math.max(0, output ?? 0);
+}
+
+function usageOutputTokens(
+  usage: LanguageModelV4Usage | undefined,
+  fallback: number,
+): number {
+  return Math.max(0, usage?.outputTokens.total ?? fallback);
 }
 
 function isHash(value: unknown): value is string {
@@ -842,7 +854,7 @@ export default defineBackground(() => {
             mode: execution.mode,
             status: "completed",
             requestBytes,
-            outputTokens: usageTokens(result.usage, reservedTokens),
+            outputTokens: usageOutputTokens(result.usage, reservedTokens),
             durationMs: Date.now() - startedAt,
           });
           post(
@@ -891,7 +903,7 @@ export default defineBackground(() => {
             mode: execution.mode,
             status: "completed",
             requestBytes,
-            outputTokens: tokens,
+            outputTokens: usageOutputTokens(streamUsage, reservedTokens),
             durationMs: Date.now() - startedAt,
           });
           post(
@@ -1410,6 +1422,17 @@ export default defineBackground(() => {
           value.origin === undefined
             ? await auditRecorder.deleteAllPersistent()
             : await auditRecorder.deletePersistentOrigin(value.origin);
+        await auditRecorder.record(
+          {
+            timestamp: Date.now(),
+            type: "audit-control",
+            ...(value.origin === undefined ? {} : { origin: value.origin }),
+            errorCode:
+              value.origin === undefined ? "deleted-all" : "deleted-origin",
+            status: "completed",
+          },
+          { privateMode: false, persistentEnabled: false },
+        );
         return { ok: true, deleted };
       }
       if (!(await verifyTrustedTab(value.tabId, value.origin))) {
@@ -1418,11 +1441,32 @@ export default defineBackground(() => {
 
       const key = sessionKey(value.tabId, value.origin);
       const settings = await loadSettings();
+      let effectiveSettings = settings;
       const execution = executionFor(value.tabId, value.origin, settings);
       if (value.type === "session.set") {
         sessionExecution.set(key, {
           mode: value.mode,
           privateMode: value.privateMode,
+        });
+      }
+      if (value.type === "audit.set") {
+        effectiveSettings = await saveSettings({
+          ...settings,
+          audit: {
+            ...settings.audit,
+            originOverrides: {
+              ...settings.audit.originOverrides,
+              [value.origin]: value.persistentEnabled,
+            },
+          },
+        });
+        await recordAudit(effectiveSettings, execution, {
+          type: "audit-control",
+          origin: value.origin,
+          errorCode: value.persistentEnabled
+            ? "persistent-enabled"
+            : "persistent-disabled",
+          status: "completed",
         });
       }
       if (value.type === "permission.set") {
@@ -1470,7 +1514,7 @@ export default defineBackground(() => {
       }
 
       let persistentEvents = 0;
-      if (settings.audit.persistentEnabled) {
+      if (persistentAuditEnabled(effectiveSettings, value.origin)) {
         try {
           persistentEvents = (
             await auditRecorder.persistentEvents(value.origin)
@@ -1485,14 +1529,17 @@ export default defineBackground(() => {
         origin: value.origin,
         permission: await permissionFor(value.tabId, value.origin),
         providerConfigured:
-          settings.provider.apiKey.length > 0 ||
-          Object.values(settings.profiles).some(
+          effectiveSettings.provider.apiKey.length > 0 ||
+          Object.values(effectiveSettings.profiles).some(
             (profile) => profile.apiKey.length > 0,
           ),
-        aliases: Object.keys(settings.aliases).sort(),
-        execution: executionFor(value.tabId, value.origin, settings),
+        aliases: Object.keys(effectiveSettings.aliases).sort(),
+        execution: executionFor(value.tabId, value.origin, effectiveSettings),
         audit: {
-          persistentEnabled: settings.audit.persistentEnabled,
+          persistentEnabled: persistentAuditEnabled(
+            effectiveSettings,
+            value.origin,
+          ),
           persistentError: persistentAuditError,
           sessionEvents: auditRecorder.sessionEvents(value.origin).length,
           persistentEvents,

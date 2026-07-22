@@ -34,6 +34,13 @@ export type PopupRequest =
     }
   | {
       marker: typeof AGENT_PROVIDER_UI_MARKER;
+      type: "audit.set";
+      tabId: number;
+      origin: string;
+      persistentEnabled: boolean;
+    }
+  | {
+      marker: typeof AGENT_PROVIDER_UI_MARKER;
       type: "approval.get";
       approvalId: string;
     }
@@ -137,6 +144,9 @@ export function isPopupRequest(value: unknown): value is PopupRequest {
       (record.mode === "standard" || record.mode === "audit-first") &&
       typeof record.privateMode === "boolean"
     );
+  }
+  if (record.type === "audit.set") {
+    return typeof record.persistentEnabled === "boolean";
   }
   return (
     record.type === "permission.set" &&

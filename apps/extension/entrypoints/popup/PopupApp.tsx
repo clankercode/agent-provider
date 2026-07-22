@@ -106,6 +106,26 @@ export function PopupApp() {
     }
   }
 
+  async function configureAudit(persistentEnabled: boolean) {
+    if (page === undefined) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      setStatus(
+        await send({
+          marker: AGENT_PROVIDER_UI_MARKER,
+          type: "audit.set",
+          ...page,
+          persistentEnabled,
+        }),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const granted =
     status?.permission === "granted-session" ||
     status?.permission === "granted-persistent";
@@ -177,6 +197,24 @@ export function PopupApp() {
                 {status.execution.privateMode ? "Private" : "Recorded"}
               </button>
             </div>
+            <div>
+              <span>Persistent trace</span>
+              <button
+                className="compact"
+                type="button"
+                aria-pressed={status.audit.persistentEnabled}
+                disabled={busy || status.execution.privateMode}
+                onClick={() =>
+                  void configureAudit(!status.audit.persistentEnabled)
+                }
+              >
+                {status.execution.privateMode
+                  ? "Paused"
+                  : status.audit.persistentEnabled
+                    ? "On for site"
+                    : "Off for site"}
+              </button>
+            </div>
             <small className={status.audit.persistentError ? "warn" : "muted"}>
               {status.audit.persistentError
                 ? "Persistent audit write needs attention"
@@ -222,6 +260,21 @@ export function PopupApp() {
       >
         Provider and model settings
       </button>
+      {status ? (
+        <button
+          className="link"
+          type="button"
+          onClick={() =>
+            void browser.tabs.create({
+              url: browser.runtime.getURL(
+                `/options.html?origin=${encodeURIComponent(status.origin)}`,
+              ),
+            })
+          }
+        >
+          Inspect this site’s audit
+        </button>
+      ) : null}
     </main>
   );
 }
