@@ -17,17 +17,17 @@ Agent Provider is not intended to provide:
 The extension protects the provider credential from ordinary page JavaScript.
 It cannot protect the user from a malicious or compromised script that already
 runs on a granted origin: that script can submit prompts and use page-declared
-tools subject to the extension’s model-access limits.  For that reason, origin
+tools subject to the extension’s model-access limits. For that reason, origin
 selection and application security are central product decisions.
 
 Prompts, tool schemas, and tool results needed for the agent loop are sent to
-the selected provider under the user’s provider account and data policy.  The
+the selected provider under the user’s provider account and data policy. The
 application must disclose this appropriately and minimize sensitive context.
 
-Current-page extraction is likewise an intentional data-disclosure path.  The
+Current-page extraction is likewise an intentional data-disclosure path. The
 context module should extract only configured main-content roots, support
 application filtering and section-level access, bound output size, and make it
-clear which content was included.  Automatic form detection must not override
+clear which content was included. Automatic form detection must not override
 an application's redaction or allow sensitive values to become prompt context
 merely because they are present in the DOM.
 
@@ -45,11 +45,19 @@ deployment model and, at minimum:
 - an incident, permission-revocation, and support procedure; and
 - provider-terms, privacy, and product-name review.
 
-## Decisions still to make
+## Bound implementation decisions
 
-The project still needs explicit decisions on its product name, initial provider
-set, supported browsers, policy ownership (user versus administrator), extension
-distribution, audit/telemetry retention, credential lifecycle, context snapshot
-format/limits, region-tagging convention, form-redaction defaults, and the scope
-of browser-standard integration.  The design drafts are useful input to those
-decisions; they are not yet the project’s binding specification.
+- The product is Agent Provider and public packages use `@agent-provider/*`.
+- The provider families are OpenAI-compatible, Anthropic-compatible, and
+  Gemini, configured through extension-owned endpoint/key profiles.
+- Chrome is the required v1 browser and Firefox is the parity target. Safari on
+  macOS is best-effort and may be deferred if it threatens Chrome/Firefox
+  delivery. Unpacked builds precede signed browser-native distribution.
+- User-owned local policy serves the bounded small-team release. The policy
+  merge seam permits a future managed adapter to tighten, never weaken, policy.
+- Persistent audit is opt-in and bounded; private mode never persists audit.
+- Context uses immutable revisioned Markdown-oriented frames, named regions,
+  application-first redaction, and deterministic limits.
+- WebMCP is an optional, explicit, off-by-default adapter over the same tool
+  execution and approval path.
+- Original and promoted code is dual-licensed as `CC0-1.0 OR Unlicense`.

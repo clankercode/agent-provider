@@ -1,0 +1,36 @@
+{
+  "name": "agent-provider-extension",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent Provider browser extension authority and provider broker.",
+  "license": "CC0-1.0 OR Unlicense",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build -b chrome",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip -b chrome",
+    "prepare": "wxt prepare",
+    "typecheck": "wxt prepare && tsc --noEmit",
+    "test": "vitest run",
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "clean": "rm -rf .wxt .output"
+  },
+  "dependencies": {
+    "@agent-provider/protocol": "0.1.0",
+    "@ai-sdk/anthropic": "^4.0.18",
+    "@ai-sdk/google": "^4.0.21",
+    "@ai-sdk/openai": "^4.0.17",
+    "@ai-sdk/provider": "^4.0.3",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@wxt-dev/module-react": "^1.2.2",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10",
+    "wxt": "^0.20.27"
+  }
+}

@@ -1,1 +1,9 @@
 draft-designs/
+node_modules/
+dist/
+coverage/
+.wxt/
+.output/
+.ud-wff/**/events.lock
+*.tsbuildinfo
+*.log

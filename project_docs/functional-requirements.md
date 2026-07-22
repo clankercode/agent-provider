@@ -1,14 +1,14 @@
 # Functional requirements
 
 This document is a build-oriented baseline of **outcomes**, not an architecture
-specification.  “Must” describes a user-visible guarantee, authority rule, or
+specification. “Must” describes a user-visible guarantee, authority rule, or
 verification property that the first complete implementation preserves.
 “Should” describes a preferred outcome where the exact behavior remains open.
 
 An implementer may choose different package/module boundaries, browser UI
 surfaces, protocol messages, storage engines, DOM-parsing libraries, and
-provider adapters.  It may also combine modules described here when doing so
-keeps the same authority separation and testable behavior.  It must not use an
+provider adapters. It may also combine modules described here when doing so
+keeps the same authority separation and testable behavior. It must not use an
 implementation choice to weaken the stated outcome.
 
 ## Page integration and runtime
@@ -17,7 +17,7 @@ implementation choice to weaken the stated outcome.
   suggestions, a logical model alias, typed tools, and optional current-page
   context configuration.
 - **FR-2:** Each tool must declare a name, description, input schema, callback,
-  and risk class (`read`, `write`, or `destructive`).  Inputs must be schema
+  and risk class (`read`, `write`, or `destructive`). Inputs must be schema
   validated before callback execution.
 - **FR-3:** The runtime must support a supplied UI and a headless integration;
   neither UI choice changes extension policy or tool semantics.
@@ -43,9 +43,9 @@ implementation choice to weaken the stated outcome.
 ## Extension and provider bridge
 
 - **FR-11:** The extension must own provider credentials and provider network
-  calls.  Neither credentials nor extension storage contents may be sent to
+  calls. Neither credentials nor extension storage contents may be sent to
   page code or content scripts.
-- **FR-12:** A page may request only configured logical aliases.  The extension
+- **FR-12:** A page may request only configured logical aliases. The extension
   must map aliases to provider/model policy and reject arbitrary provider
   headers, provider-specific options, and provider-executed tools.
 - **FR-13:** The extension must derive the origin from browser sender/tab
@@ -53,7 +53,7 @@ implementation choice to weaken the stated outcome.
   permission for every model request.
 - **FR-14:** Communication across the page/extension seam must be compatible
   across intended versions, validate untrusted input, bound work/data, support
-  correlation, cancellation, and timeout, and fail closed on disconnect.  A
+  correlation, cancellation, and timeout, and fail closed on disconnect. A
   versioned wire protocol is the expected implementation, not the only one.
 - **FR-15:** Before results reach page code, the extension must remove raw
   transport bodies/headers/chunks and redact credential-like metadata.
@@ -67,7 +67,7 @@ implementation choice to weaken the stated outcome.
   session modes; audit-first requires approval of every provider request and
   every tool call.
 - **FR-18:** A write/destructive callback must not execute without the runtime's
-  required page-native approval.  In audit-first mode it must also have a
+  required page-native approval. In audit-first mode it must also have a
   matching, single-use extension approval.
 - **FR-19:** The extension must provide an origin-scoped audit view, opt-in
   persistent audit storage, private sessions, origin/global deletion controls,
@@ -82,7 +82,11 @@ implementation choice to weaken the stated outcome.
   model and tool approval denial/timeout/cancellation; navigation and bridge
   disconnect; context-root and redaction behavior; audit persistence/private
   session/deletion; and no provider credential or raw transport leakage.
-- **FR-22:** The built extension manifest must use only exact configured page and
-  provider host permissions—never a broad default such as `<all_urls>`.
+- **FR-22:** The built extension manifest must never use `<all_urls>` or broad
+  required/active host access. Exact official provider origins may be required.
+  A browser may declare broad HTTPS _optional eligibility_ only when the user
+  must perform a browser-mediated gesture to activate one exact custom endpoint
+  origin, which remains inspectable and revocable. Tests distinguish required,
+  optionally eligible, and actively granted origins.
 - **FR-23:** The project must provide a runnable sample application containing
   read, write, destructive, named-context-region, and form-context examples.

@@ -1,0 +1,45 @@
+{
+  "name": "agent-provider-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Browser-mediated, user-controlled model access for trusted web applications.",
+  "license": "CC0-1.0 OR Unlicense",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "examples/*"
+  ],
+  "scripts": {
+    "clean": "npm run clean --workspaces --if-present && rm -rf coverage",
+    "build:packages": "npm run build -w @agent-provider/protocol && npm run build -w @agent-provider/context && npm run build -w @agent-provider/ai-sdk && npm run build -w @agent-provider/runtime && npm run build -w @agent-provider/react && npm run build -w @agent-provider/webmcp",
+    "build:extension": "npm run build -w agent-provider-extension",
+    "build:firefox": "npm run build:firefox -w agent-provider-extension",
+    "build:example": "npm run build -w agent-provider-operations-dashboard",
+    "build": "npm run build:packages && npm run build:extension && npm run build:firefox && npm run build:example",
+    "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:live": "npm run test:live -w agent-provider-extension",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run format:check && npm run typecheck && npm run test && npm run build",
+    "dev:extension": "npm run dev -w agent-provider-extension",
+    "dev:example": "npm run dev -w agent-provider-operations-dashboard"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "prettier": "^3.9.6",
+    "tsup": "^8.5.1",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  },
+  "overrides": {
+    "adm-zip": "0.6.0",
+    "esbuild": "0.27.2",
+    "shell-quote": "1.10.0",
+    "tmp": "0.2.7",
+    "uuid": "11.1.1"
+  }
+}

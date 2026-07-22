@@ -1,0 +1,30 @@
+{
+  "name": "agent-provider-operations-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "license": "CC0-1.0 OR Unlicense",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b --pretty false",
+    "test": "vitest run --passWithNoTests",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@agent-provider/context": "0.1.0",
+    "@agent-provider/runtime": "0.1.0",
+    "@agent-provider/react": "0.1.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.0.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
+  }
+}

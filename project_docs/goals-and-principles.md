@@ -4,11 +4,11 @@
 
 Agent Provider should make it practical for a trusted web application to offer
 an embedded, tool-using AI assistant while keeping the application’s existing
-authority model intact.  It is aimed first at internal and first-party
+authority model intact. It is aimed first at internal and first-party
 applications where the agent can help a user understand current state and carry
 out bounded operational work.
 
-The project is not a generic browser automation system.  It is a bridge between
+The project is not a generic browser automation system. It is a bridge between
 an application’s typed capabilities and a user-selected language-model provider.
 
 ## Goals
@@ -38,20 +38,20 @@ an application’s typed capabilities and a user-selected language-model provide
 
 The model proposes actions; application tools decide what can actually happen.
 Every tool must continue to enforce ordinary server-side authorization,
-validation, ownership, idempotency, and business limits.  An LLM is not an
+validation, ownership, idempotency, and business limits. An LLM is not an
 authorization system.
 
 ### Treat an origin as one trust principal
 
 Browser isolation protects the extension credential boundary, but it does not
-distinguish scripts within a granted origin.  Granting an origin therefore means
-trusting all script that can run there.  Narrow origins, strong CSP/XSS hygiene,
+distinguish scripts within a granted origin. Granting an origin therefore means
+trusting all script that can run there. Narrow origins, strong CSP/XSS hygiene,
 and third-party-script governance are prerequisites, not optional polish.
 
 ### Centralize provider policy
 
 The page should request a stable alias such as `default` or `reasoning`, not an
-arbitrary provider model, HTTP header, or provider-specific option.  The
+arbitrary provider model, HTTP header, or provider-specific option. The
 extension maps aliases to user or administrator policy: provider, model,
 output/reasoning ceilings, timeouts, and other limits.
 
@@ -59,34 +59,34 @@ output/reasoning ceilings, timeouts, and other limits.
 
 If permission is absent, the bridge disconnects, a request times out, or data
 cannot be safely serialized, no model call or tool callback should silently
-continue.  Raw provider transport details and credential-like metadata do not
+continue. Raw provider transport details and credential-like metadata do not
 belong in page-visible results.
 
 ### Keep interfaces small and versioned
 
 The page-to-extension protocol should carry only the information needed for a
 standard model call: a versioned envelope, a logical alias, conservative call
-options, and scrubbed generated results.  Credentials, extension settings, and
+options, and scrubbed generated results. Credentials, extension settings, and
 provider-specific controls remain outside that protocol.
 
 ### Prefer explicitness for side effects
 
-Tools are classified at least as `read`, `write`, or `destructive`.  Writes and
+Tools are classified at least as `read`, `write`, or `destructive`. Writes and
 destructive operations require an app-native user confirmation by default.
 Confirmation improves operational safety, but it does not replace application
 authorization or turn an untrusted page into a trusted one.
 
 ### Expose semantic context, not an unrestricted DOM
 
-Page context belongs behind one deep **context module**.  Its small interface
+Page context belongs behind one deep **context module**. Its small interface
 should let an application provide the current main-content element (or a short
 list of them), optionally label meaningful subregions, and obtain a text
-snapshot or a named section.  Its implementation can handle DOM traversal,
+snapshot or a named section. Its implementation can handle DOM traversal,
 Markdown/simplified-HTML rendering, form discovery, filtering, truncation, and
-refreshing.  This gives applications leverage without requiring each one to
+refreshing. This gives applications leverage without requiring each one to
 recreate a brittle DOM-to-prompt pipeline.
 
 Automatic detection is a useful default—especially for ordinary forms and
-standard main-content layouts—but it is advisory.  Applications must be able to
+standard main-content layouts—but it is advisory. Applications must be able to
 provide roots and explicit extractor functions when their semantics, privacy
 requirements, or UI structure need more precision.

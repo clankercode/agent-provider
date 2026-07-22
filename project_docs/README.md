@@ -1,4 +1,4 @@
-# Agent Provider: initial project documentation
+# Agent Provider project documentation
 
 Agent Provider is a proposed browser-mediated foundation for putting useful AI
 agents inside trusted web applications without asking each application to own a
@@ -6,7 +6,7 @@ model backend or to handle a user’s model credentials.
 
 It takes its initial direction from the unpacked design materials in
 [`draft-designs/unpacked/`](../draft-designs/unpacked/): the more complete
-**Sitehand** proof of concept and the earlier **Offsider** exploration.  The
+**Sitehand** proof of concept and the earlier **Offsider** exploration. The
 names are design-history names, not a decision about the product name.
 
 ## Start here
@@ -31,11 +31,8 @@ provider; the user authorizes both model access and consequential actions.
 
 ## Status
 
-This is a direction-setting contract, not a prescribed implementation.  It
-defines outcomes, authority boundaries, and user-visible guarantees that a
-complete implementation must preserve.  Package layout, public names, protocol
-shape, browser UI surface, storage mechanism, provider adapters, and extraction
-algorithms remain open unless a later decision records them explicitly.
-
-The supplied designs describe a reviewed proof of concept, not a production
-release.
+Implementation is in progress under the accepted
+[implementation plan](../.plan/2026-07-23-quiet-lantern/index.md). These files
+remain the canonical product contract; the plan records binding implementation
+choices and verification defaults. The supplied designs are historical inputs,
+not public compatibility commitments.
