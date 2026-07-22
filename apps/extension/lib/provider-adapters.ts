@@ -58,6 +58,18 @@ function credentialFor(profile: ProviderProfile): ProviderCredentialHeaders {
   return { family: profile.family, apiKey: profile.apiKey };
 }
 
+function providerSdkBaseUrl(
+  profile: ProviderProfile,
+  endpoint: string,
+): string {
+  if (profile.family !== "anthropic-compatible") return endpoint;
+  const parsed = new URL(endpoint);
+  if (!parsed.pathname.endsWith("/v1/")) {
+    parsed.pathname = `${parsed.pathname}v1/`;
+  }
+  return parsed.toString();
+}
+
 function createSdkModel(
   profile: ProviderProfile,
   alias: ProviderAlias,
@@ -88,7 +100,9 @@ function createSdkModel(
   if (profile.family === "anthropic-compatible") {
     return createAnthropic({
       apiKey: SDK_PLACEHOLDER_KEY,
-      baseURL: resolved.canonicalEndpoint.url,
+      // Anthropic-compatible profile endpoints name the service root. The AI
+      // SDK expects the API base and appends /messages itself.
+      baseURL: providerSdkBaseUrl(profile, resolved.canonicalEndpoint.url),
       fetch: providerFetch,
     })(alias.modelId);
   }

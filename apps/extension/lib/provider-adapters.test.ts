@@ -82,6 +82,21 @@ describe("normalized AI SDK provider adapters", () => {
     );
   });
 
+  it("maps an Anthropic-compatible service root to its v1 API base", async () => {
+    const profile = {
+      ...PROVIDER_PROFILES.anthropic!,
+      endpoint: "https://anthropic.fixture.invalid/",
+    };
+    await createProviderAdapter(profile).generate(
+      providerAlias(profile.id),
+      { prompt: [] } as unknown as LanguageModelV4CallOptions,
+      new AbortController().signal,
+    );
+    expect(sdk.configurations.get(profile.family)).toMatchObject({
+      baseURL: "https://anthropic.fixture.invalid/v1/",
+    });
+  });
+
   it("does not construct or dispatch a model for a pre-aborted request", async () => {
     const profile = PROVIDER_PROFILES.gemini!;
     const controller = new AbortController();
