@@ -113,8 +113,13 @@ interface PendingProviderApproval {
 const pendingApprovals = new Map<string, PendingProviderApproval>();
 const approvedToolCalls = new Map<
   string,
-  { declarationInputHash: string; expiresAt: number }
+  {
+    declarationInputHash: string;
+    expiresAt: number;
+    state: "approved" | "dispatched";
+  }
 >();
+const MAX_CLIENTS_PER_TAB = 32;
 
 function sessionKey(tabId: number, origin: string): string {
   return `${tabId}:${origin}`;
@@ -685,10 +690,19 @@ export default defineBackground(() => {
       return;
     }
     const connectedKey = sessionKey(tabId, origin);
-    connectedTabOrigins.set(
-      connectedKey,
-      (connectedTabOrigins.get(connectedKey) ?? 0) + 1,
-    );
+    let disconnected = false;
+    const trustedOrigin = originBridgeEnabled(origin);
+    void trustedOrigin.then((trusted) => {
+      if (disconnected) return;
+      if (!trusted) {
+        port.disconnect();
+        return;
+      }
+      connectedTabOrigins.set(
+        connectedKey,
+        (connectedTabOrigins.get(connectedKey) ?? 0) + 1,
+      );
+    });
     let activeCount = 0;
     const sessions = new Map<string, string>();
     const controllers = new Map<string, AbortController>();
@@ -1118,18 +1132,22 @@ export default defineBackground(() => {
           });
           approved = decision.approved;
           reason = decision.reason;
-          if (approved) {
-            approvedToolCalls.set(
-              toolExecutionKey({
-                tabId,
-                clientId: message.clientId,
-                sessionId,
-                runId: payload.runId,
-                toolCallId: payload.toolCallId,
-              }),
-              { declarationInputHash, expiresAt: Date.now() + 120_000 },
-            );
-          }
+        }
+        if (approved) {
+          approvedToolCalls.set(
+            toolExecutionKey({
+              tabId,
+              clientId: message.clientId,
+              sessionId,
+              runId: payload.runId,
+              toolCallId: payload.toolCallId,
+            }),
+            {
+              declarationInputHash,
+              expiresAt: Date.now() + 120_000,
+              state: "approved",
+            },
+          );
         }
         await recordAudit(settings, execution, {
           type: "tool-proposal",
@@ -1173,6 +1191,7 @@ export default defineBackground(() => {
         return;
       }
       const payload = message.payload;
+      if (payload.state === "queued") return;
       const settings = await loadSettings();
       const execution = executionFor(tabId, origin, settings);
       const key = toolExecutionKey({
@@ -1186,26 +1205,34 @@ export default defineBackground(() => {
         declarationHash: payload.declarationHash,
         inputHash: payload.inputHash,
       });
-      if (execution.mode === "audit-first" && payload.state === "dispatched") {
-        const authorization = approvedToolCalls.get(key);
-        if (
-          authorization === undefined ||
-          authorization.expiresAt <= Date.now() ||
-          authorization.declarationInputHash !== declarationInputHash
-        ) {
-          await recordAudit(settings, execution, {
-            type: "policy-failure",
-            origin,
-            runId: payload.runId,
-            mode: execution.mode,
-            toolName: payload.toolName,
-            risk: payload.risk,
-            status: "failed",
-            errorCode: "TOOL_APPROVAL_MISMATCH",
-          });
-          return;
-        }
+      const authorization = approvedToolCalls.get(key);
+      if (payload.state === "cancelled" && authorization === undefined) {
+        // The approval handler already recorded an extension denial/expiry.
+        return;
       }
+      const terminalRequiresDispatch =
+        payload.state === "completed" || payload.state === "failed";
+      if (
+        authorization === undefined ||
+        authorization.expiresAt <= Date.now() ||
+        authorization.declarationInputHash !== declarationInputHash ||
+        (payload.state === "dispatched" &&
+          authorization.state !== "approved") ||
+        (terminalRequiresDispatch && authorization.state !== "dispatched")
+      ) {
+        await recordAudit(settings, execution, {
+          type: "policy-failure",
+          origin,
+          runId: payload.runId,
+          mode: execution.mode,
+          toolName: payload.toolName,
+          risk: payload.risk,
+          status: "failed",
+          errorCode: "TOOL_APPROVAL_MISMATCH",
+        });
+        return;
+      }
+      if (payload.state === "dispatched") authorization.state = "dispatched";
       if (
         payload.state === "completed" ||
         payload.state === "failed" ||
@@ -1231,29 +1258,46 @@ export default defineBackground(() => {
       if (isBootstrapMessage(value)) {
         if (value.type !== "hello" || value.direction !== "page-to-extension")
           return;
-        const selectedVersion = negotiateProtocolVersion(value);
-        if (selectedVersion === undefined) {
-          post({
-            channel: "agent-provider.bridge",
-            bootstrap: 0,
-            type: "reject",
-            direction: "extension-to-page",
-            clientId: value.clientId,
-            code: "NO_VERSION_OVERLAP",
+        void trustedOrigin.then((trusted) => {
+          if (!trusted) return;
+          const selectedVersion = negotiateProtocolVersion(value);
+          if (selectedVersion === undefined) {
+            post({
+              channel: "agent-provider.bridge",
+              bootstrap: 0,
+              type: "reject",
+              direction: "extension-to-page",
+              clientId: value.clientId,
+              code: "NO_VERSION_OVERLAP",
+            });
+            return;
+          }
+          if (
+            !sessions.has(value.clientId) &&
+            sessions.size >= MAX_CLIENTS_PER_TAB
+          ) {
+            post({
+              channel: "agent-provider.bridge",
+              bootstrap: 0,
+              type: "reject",
+              direction: "extension-to-page",
+              clientId: value.clientId,
+              code: "INVALID_BOOTSTRAP",
+            });
+            return;
+          }
+          const sessionId = `session-${crypto.randomUUID()}`;
+          sessions.set(value.clientId, sessionId);
+          void capabilitiesFor(tabId, origin).then((capabilities) => {
+            post(
+              createBootstrapReady({
+                hello: value,
+                sessionId,
+                selectedVersion,
+                capabilities,
+              }),
+            );
           });
-          return;
-        }
-        const sessionId = `session-${crypto.randomUUID()}`;
-        sessions.set(value.clientId, sessionId);
-        void capabilitiesFor(tabId, origin).then((capabilities) => {
-          post(
-            createBootstrapReady({
-              hello: value,
-              sessionId,
-              selectedVersion,
-              capabilities,
-            }),
-          );
         });
         return;
       }
@@ -1406,9 +1450,13 @@ export default defineBackground(() => {
     });
 
     port.onDisconnect.addListener(() => {
-      const remaining = (connectedTabOrigins.get(connectedKey) ?? 1) - 1;
-      if (remaining <= 0) connectedTabOrigins.delete(connectedKey);
-      else connectedTabOrigins.set(connectedKey, remaining);
+      disconnected = true;
+      const connected = connectedTabOrigins.get(connectedKey);
+      if (connected !== undefined) {
+        const remaining = connected - 1;
+        if (remaining <= 0) connectedTabOrigins.delete(connectedKey);
+        else connectedTabOrigins.set(connectedKey, remaining);
+      }
       for (const controller of controllers.values()) controller.abort();
       controllers.clear();
       for (const key of ownedPendingKeys) {

@@ -1,6 +1,7 @@
 import { chromium } from "playwright-core";
 import { spawn } from "node:child_process";
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
+import { createServer } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -8,6 +9,7 @@ const root = resolve(import.meta.dirname, "..");
 const extensionPath = join(root, "apps/extension/.output/chrome-mv3");
 const profilePath = await mkdtemp(join(tmpdir(), "agent-provider-browser-"));
 const appOrigin = "http://127.0.0.1:5173";
+const untrustedOrigin = "http://127.0.0.1:5174";
 const live = process.argv.includes("--live");
 
 await access(join(extensionPath, "manifest.json"));
@@ -135,6 +137,14 @@ async function runLiveRequest(app) {
 }
 
 await waitForServer();
+const untrustedServer = createServer((_request, response) => {
+  response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+  response.end("<!doctype html><title>Untrusted localhost fixture</title>");
+});
+await new Promise((resolveListen, rejectListen) => {
+  untrustedServer.once("error", rejectListen);
+  untrustedServer.listen(5174, "127.0.0.1", resolveListen);
+});
 
 const context = await chromium.launchPersistentContext(profilePath, {
   headless: false,
@@ -196,6 +206,43 @@ try {
       "undefined",
     "Provider storage was exposed to page JavaScript.",
   );
+
+  const untrusted = await context.newPage();
+  await untrusted.goto(untrustedOrigin, { waitUntil: "networkidle" });
+  const untrustedReady = await untrusted.evaluate(
+    () =>
+      new Promise((resolveReady) => {
+        const clientId = "untrusted-localhost-test";
+        const listener = (event) => {
+          if (
+            event.data?.channel === "agent-provider.bridge" &&
+            event.data?.clientId === clientId &&
+            event.data?.direction === "extension-to-page" &&
+            event.data?.type === "ready"
+          ) {
+            resolveReady(true);
+          }
+        };
+        window.addEventListener("message", listener);
+        window.postMessage(
+          {
+            channel: "agent-provider.bridge",
+            bootstrap: 0,
+            type: "hello",
+            direction: "page-to-extension",
+            clientId,
+            supported: { min: 2, max: 2 },
+          },
+          location.origin,
+        );
+        setTimeout(() => {
+          window.removeEventListener("message", listener);
+          resolveReady(false);
+        }, 750);
+      }),
+  );
+  assert(!untrustedReady, "An unlisted localhost port established a bridge.");
+  await untrusted.close();
 
   await app.bringToFront();
   const appTabId = await options.evaluate(async () => {
@@ -313,6 +360,7 @@ try {
 } finally {
   await context.close();
   server.kill("SIGTERM");
+  untrustedServer.close();
   await new Promise((resolveExit) => {
     if (server.exitCode !== null) return resolveExit();
     server.once("exit", resolveExit);

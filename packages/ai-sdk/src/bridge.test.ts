@@ -226,7 +226,7 @@ describe("AgentProviderBridge", () => {
       state: "completed",
       occurredAt: Date.now(),
     });
-    await new Promise((resolve) => queueMicrotask(resolve));
+    await new Promise<void>((resolve) => queueMicrotask(resolve));
     expect(transport.reports).toHaveLength(1);
 
     bridge.dispose();
