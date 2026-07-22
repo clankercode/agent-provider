@@ -23,11 +23,16 @@ export interface QuotaReservation {
   readonly estimatedCostMicros?: number;
 }
 
-interface SettledUsage {
+export interface SettledUsage {
   scope: string;
   timestamp: number;
   tokens: number;
   costMicros?: number;
+}
+
+export interface QuotaSnapshot {
+  reservations: readonly QuotaReservation[];
+  settled: readonly SettledUsage[];
 }
 
 export class QuotaExceededError extends Error {
@@ -56,7 +61,10 @@ export class QuotaLedger {
   readonly #limits: Readonly<QuotaLimits>;
   #settled: SettledUsage[] = [];
 
-  constructor(limits: Readonly<QuotaLimits>) {
+  constructor(
+    limits: Readonly<QuotaLimits>,
+    snapshot: Readonly<QuotaSnapshot> = { reservations: [], settled: [] },
+  ) {
     for (const [field, value] of Object.entries({
       requestsPerMinute: limits.requestsPerMinute,
       requestsPerDay: limits.requestsPerDay,
@@ -70,6 +78,59 @@ export class QuotaLedger {
       }
     }
     this.#limits = Object.freeze({ ...limits });
+    for (const reservation of snapshot.reservations) {
+      if (
+        typeof reservation.id !== "string" ||
+        reservation.id.length === 0 ||
+        typeof reservation.scope !== "string" ||
+        reservation.scope.length === 0 ||
+        !Number.isFinite(reservation.reservedAt) ||
+        reservation.reservedAt < 0
+      ) {
+        throw new TypeError("Quota reservation snapshot is invalid.");
+      }
+      const safe: QuotaReservation = Object.freeze({
+        id: reservation.id,
+        scope: reservation.scope,
+        reservedAt: reservation.reservedAt,
+        estimatedTokens: nonNegativeInteger(
+          reservation.estimatedTokens,
+          "estimatedTokens",
+        ),
+        ...(reservation.estimatedCostMicros === undefined
+          ? {}
+          : {
+              estimatedCostMicros: nonNegativeInteger(
+                reservation.estimatedCostMicros,
+                "estimatedCostMicros",
+              ),
+            }),
+      });
+      if (this.#reservations.has(safe.id)) {
+        throw new TypeError("Quota reservation snapshot contains duplicates.");
+      }
+      this.#reservations.set(safe.id, safe);
+    }
+    this.#settled = snapshot.settled.map((usage) => {
+      if (
+        typeof usage.scope !== "string" ||
+        usage.scope.length === 0 ||
+        !Number.isFinite(usage.timestamp) ||
+        usage.timestamp < 0
+      ) {
+        throw new TypeError("Settled quota snapshot is invalid.");
+      }
+      return {
+        scope: usage.scope,
+        timestamp: usage.timestamp,
+        tokens: nonNegativeInteger(usage.tokens, "tokens"),
+        ...(usage.costMicros === undefined
+          ? {}
+          : {
+              costMicros: nonNegativeInteger(usage.costMicros, "costMicros"),
+            }),
+      };
+    });
   }
 
   reserve(request: QuotaReservationRequest): QuotaReservation {
@@ -181,10 +242,24 @@ export class QuotaLedger {
     return this.#reservations.delete(reservationId);
   }
 
-  snapshot(now = Date.now()): Readonly<{
-    reservations: readonly QuotaReservation[];
-    settled: readonly Readonly<SettledUsage>[];
-  }> {
+  /** Conservatively charges abandoned reservations after a worker restart. */
+  reconcileUnknownOutcomes(now = Date.now()): readonly QuotaReservation[] {
+    const unknown = [...this.#reservations.values()];
+    for (const reservation of unknown) {
+      this.#reservations.delete(reservation.id);
+      this.#settled.push({
+        scope: reservation.scope,
+        timestamp: now,
+        tokens: reservation.estimatedTokens,
+        ...(reservation.estimatedCostMicros === undefined
+          ? {}
+          : { costMicros: reservation.estimatedCostMicros }),
+      });
+    }
+    return Object.freeze(unknown.map((item) => Object.freeze({ ...item })));
+  }
+
+  snapshot(now = Date.now()): Readonly<QuotaSnapshot> {
     this.#prune(now);
     return Object.freeze({
       reservations: Object.freeze([...this.#reservations.values()]),
