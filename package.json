@@ -25,6 +25,7 @@
     "test:browser": "npm run build:packages && npm run build:extension && node scripts/test-extension-browser.mjs",
     "test:browser:live": "npm run build:packages && npm run build:extension && node scripts/test-extension-browser.mjs --live",
     "test:firefox": "npm run build:packages && npm run build:firefox && web-ext lint --source-dir apps/extension/.output/firefox-mv3 && node scripts/test-extension-firefox.mjs",
+    "capture:ui": "npm run build:extension && node scripts/capture-extension-ui.mjs",
     "package:stores": "node scripts/package-store-release.mjs",
     "test:live": "npm run test:live -w agent-provider-extension",
     "format": "prettier --write .",

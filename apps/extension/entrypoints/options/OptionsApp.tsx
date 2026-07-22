@@ -11,6 +11,11 @@ import type {
   ProviderFamily,
   ProviderProfile,
 } from "../../lib/provider-profiles.js";
+import { DEFAULT_PROVIDER_ENDPOINTS } from "../../lib/provider-profiles.js";
+import {
+  listProviderModels,
+  type ProviderModel,
+} from "../../lib/provider-models.js";
 import {
   AGENT_PROVIDER_UI_MARKER,
   type AuditView,
@@ -53,6 +58,95 @@ async function requestProviderOrigins(
   }
 }
 
+interface ModelCatalogState {
+  phase: "loading" | "ready" | "error";
+  models: ProviderModel[];
+  selectedId?: string;
+  message?: string;
+}
+
+function settingsSnapshot(
+  settings: AgentProviderExtensionSettings,
+  aliasesText: string,
+): string {
+  return JSON.stringify({ aliasesText, settings });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function ModelCatalog({
+  state,
+  disabled,
+  onPull,
+  onSelect,
+  onUse,
+}: {
+  state: ModelCatalogState | undefined;
+  disabled: boolean;
+  onPull(): void;
+  onSelect(id: string): void;
+  onUse(id: string): void;
+}) {
+  const selectedId = state?.selectedId ?? state?.models[0]?.id ?? "";
+  return (
+    <div className="model-catalog" aria-live="polite">
+      <div className="model-catalog-heading">
+        <div>
+          <strong>Provider models</strong>
+          <span>Pull the provider catalog without exposing your key.</span>
+        </div>
+        <button
+          className="secondary"
+          type="button"
+          disabled={disabled || state?.phase === "loading"}
+          onClick={onPull}
+        >
+          {state?.phase === "loading" ? "Pulling…" : "Pull models"}
+        </button>
+      </div>
+      {state?.phase === "error" ? (
+        <div className="catalog-error" role="alert">
+          {state.message}
+        </div>
+      ) : null}
+      {state?.phase === "ready" && state.models.length === 0 ? (
+        <div className="catalog-empty">
+          No usable generation models were returned. Manual model IDs still
+          work.
+        </div>
+      ) : null}
+      {state?.phase === "ready" && state.models.length > 0 ? (
+        <div className="model-catalog-result">
+          <label>
+            Available models ({state.models.length})
+            <select
+              value={selectedId}
+              onChange={(event) => onSelect(event.currentTarget.value)}
+            >
+              {state.models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.displayName === undefined
+                    ? model.id
+                    : `${model.displayName} — ${model.id}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="secondary"
+            type="button"
+            onClick={() => onUse(selectedId)}
+          >
+            Use for default alias
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function OptionsApp() {
   const initialAuditOrigin = new URLSearchParams(location.search).get("origin");
   const [settings, setSettings] = useState<AgentProviderExtensionSettings>(() =>
@@ -60,8 +154,14 @@ export function OptionsApp() {
   );
   const [aliasesText, setAliasesText] = useState("");
   const [showKey, setShowKey] = useState(false);
-  const [status, setStatus] = useState("Loading…");
+  const [savePhase, setSavePhase] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const [savedSnapshot, setSavedSnapshot] = useState<string>();
   const [error, setError] = useState<string>();
+  const [modelCatalogs, setModelCatalogs] = useState<
+    Record<string, ModelCatalogState>
+  >({});
   const [audit, setAudit] = useState<AuditView>();
   const [auditOrigin, setAuditOrigin] = useState<string | undefined>(
     initialAuditOrigin === null ? undefined : initialAuditOrigin,
@@ -70,14 +170,34 @@ export function OptionsApp() {
 
   useEffect(() => {
     void loadSettings().then((loaded) => {
+      const loadedAliases = JSON.stringify(loaded.aliases, null, 2);
       setSettings(loaded);
-      setAliasesText(JSON.stringify(loaded.aliases, null, 2));
-      setStatus("Ready");
+      setAliasesText(loadedAliases);
+      setSavedSnapshot(settingsSnapshot(loaded, loadedAliases));
     });
     void readAudit(initialAuditOrigin ?? undefined)
       .then(setAudit)
       .catch(() => undefined);
   }, []);
+
+  const dirty =
+    savedSnapshot !== undefined &&
+    settingsSnapshot(settings, aliasesText) !== savedSnapshot;
+  const saveBarVisible =
+    dirty ||
+    savePhase === "saving" ||
+    savePhase === "saved" ||
+    savePhase === "error";
+
+  useEffect(() => {
+    if (savePhase !== "saved") return;
+    const timeout = window.setTimeout(() => setSavePhase("idle"), 2_400);
+    return () => window.clearTimeout(timeout);
+  }, [savePhase]);
+
+  useEffect(() => {
+    if (dirty && savePhase === "saved") setSavePhase("idle");
+  }, [dirty, savePhase]);
 
   async function deleteAudit() {
     const response = (await browser.runtime.sendMessage({
@@ -95,22 +215,112 @@ export function OptionsApp() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setError(undefined);
-    setStatus("Saving…");
+    if (!dirty) return;
+    setSavePhase("saving");
     try {
       const aliases = JSON.parse(aliasesText) as unknown;
       const next = normalizeSettings({ ...settings, aliases });
       await requestProviderOrigins(next);
       const saved = await saveSettings(next);
+      const savedAliases = JSON.stringify(saved.aliases, null, 2);
       setSettings(saved);
-      setAliasesText(JSON.stringify(saved.aliases, null, 2));
-      setStatus("Saved");
+      setAliasesText(savedAliases);
+      setSavedSnapshot(settingsSnapshot(saved, savedAliases));
+      setSavePhase("saved");
     } catch (cause) {
-      setStatus("Not saved");
+      setSavePhase("error");
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   }
 
+  function clearModelCatalog(id: string) {
+    setModelCatalogs((current) => {
+      if (current[id] === undefined) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  }
+
+  async function pullModels(id: string, profile: ProviderProfile) {
+    setModelCatalogs((current) => ({
+      ...current,
+      [id]: { phase: "loading", models: [] },
+    }));
+    try {
+      await requestProviderOrigins({
+        ...settings,
+        profiles: { [profile.id]: profile },
+        provider: {
+          ...settings.provider,
+          endpoint: profile.endpoint,
+        },
+      });
+      const models = await listProviderModels(profile);
+      setModelCatalogs((current) => ({
+        ...current,
+        [id]: {
+          phase: "ready",
+          models,
+          ...(models[0] === undefined ? {} : { selectedId: models[0].id }),
+        },
+      }));
+    } catch (cause) {
+      setModelCatalogs((current) => ({
+        ...current,
+        [id]: {
+          phase: "error",
+          models: [],
+          message: cause instanceof Error ? cause.message : String(cause),
+        },
+      }));
+    }
+  }
+
+  function selectModel(catalogId: string, selectedId: string) {
+    setModelCatalogs((current) => {
+      const catalog = current[catalogId];
+      if (catalog === undefined) return current;
+      return { ...current, [catalogId]: { ...catalog, selectedId } };
+    });
+  }
+
+  function useModelForDefaultAlias(
+    profileId: string | undefined,
+    modelId: string,
+  ) {
+    try {
+      const aliases = JSON.parse(aliasesText) as unknown;
+      if (!isRecord(aliases))
+        throw new TypeError("Alias map must be an object.");
+      const existing = isRecord(aliases.default) ? aliases.default : {};
+      const defaultAlias: Record<string, unknown> = {
+        ...existing,
+        model: modelId,
+        maxOutputTokens:
+          typeof existing.maxOutputTokens === "number"
+            ? existing.maxOutputTokens
+            : 2_048,
+      };
+      if (profileId === undefined) delete defaultAlias.profileId;
+      else defaultAlias.profileId = profileId;
+      setAliasesText(
+        JSON.stringify({ ...aliases, default: defaultAlias }, null, 2),
+      );
+      setError(undefined);
+      setSavePhase("idle");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? `Fix the alias JSON before applying a model: ${cause.message}`
+          : "Fix the alias JSON before applying a model.",
+      );
+      setSavePhase("error");
+    }
+  }
+
   function updateProfile(id: string, patch: Partial<ProviderProfile>) {
+    clearModelCatalog(id);
     setSettings((current) => ({
       ...current,
       profiles: {
@@ -120,19 +330,28 @@ export function OptionsApp() {
     }));
   }
 
-  function addProfile() {
+  function addProfile(family: ProviderFamily) {
     setSettings((current) => {
-      let index = Object.keys(current.profiles).length + 1;
-      while (current.profiles[`provider-${index}`] !== undefined) index += 1;
-      const id = `provider-${index}`;
+      const stem =
+        family === "openai-compatible"
+          ? "openai"
+          : family === "anthropic-compatible"
+            ? "anthropic"
+            : "gemini";
+      let id = stem;
+      let index = 2;
+      while (current.profiles[id] !== undefined) {
+        id = `${stem}-${index}`;
+        index += 1;
+      }
       return {
         ...current,
         profiles: {
           ...current.profiles,
           [id]: {
             id,
-            family: "openai-compatible",
-            endpoint: "https://api.openai.com/v1/",
+            family,
+            endpoint: DEFAULT_PROVIDER_ENDPOINTS[family],
             apiKey: "",
           },
         },
@@ -141,6 +360,7 @@ export function OptionsApp() {
   }
 
   function removeProfile(id: string) {
+    clearModelCatalog(id);
     setSettings((current) => {
       const profiles = { ...current.profiles };
       delete profiles[id];
@@ -148,10 +368,41 @@ export function OptionsApp() {
     });
   }
 
+  function updateLegacyProvider(
+    patch: Partial<AgentProviderExtensionSettings["provider"]>,
+  ) {
+    clearModelCatalog("legacy-openai");
+    setSettings((current) => ({
+      ...current,
+      provider: { ...current.provider, ...patch },
+    }));
+  }
+
+  const legacyProfile: ProviderProfile = {
+    id: "legacy-openai",
+    family: "openai-compatible",
+    endpoint: settings.provider.endpoint,
+    apiKey: settings.provider.apiKey,
+    ...(settings.provider.organization
+      ? { organization: settings.provider.organization }
+      : {}),
+    ...(settings.provider.project
+      ? { project: settings.provider.project }
+      : {}),
+  };
+
+  const auditEvents = [
+    ...new Map(
+      [...(audit?.persistent ?? []), ...(audit?.session ?? [])].map((event) => [
+        `${event.id}:${event.timestamp}`,
+        event,
+      ]),
+    ).values(),
+  ];
   const auditOrigins = [
     ...new Set(
-      [...(audit?.persistent ?? []), ...(audit?.session ?? [])].flatMap(
-        (event) => (event.origin === undefined ? [] : [event.origin]),
+      auditEvents.flatMap((event) =>
+        event.origin === undefined ? [] : [event.origin],
       ),
     ),
   ].sort();
@@ -178,15 +429,41 @@ export function OptionsApp() {
                 change.
               </p>
             </div>
-            <button className="secondary" type="button" onClick={addProfile}>
-              Add profile
-            </button>
+            <div
+              className="provider-add-actions"
+              aria-label="Add provider profile"
+            >
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => addProfile("openai-compatible")}
+              >
+                Add OpenAI
+              </button>
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => addProfile("anthropic-compatible")}
+              >
+                Add Anthropic
+              </button>
+              <button
+                className="secondary"
+                type="button"
+                onClick={() => addProfile("gemini")}
+              >
+                Add Gemini
+              </button>
+            </div>
           </div>
 
           {Object.entries(settings.profiles).length === 0 ? (
             <div className="empty-state">
               <strong>No named profiles yet</strong>
-              <span>Add one for custom endpoints or non-OpenAI providers.</span>
+              <span>
+                Start with an OpenAI, Anthropic, or Gemini endpoint preset. You
+                can replace it with a compatible custom endpoint.
+              </span>
             </div>
           ) : (
             <div className="profile-list">
@@ -210,11 +487,17 @@ export function OptionsApp() {
                       Family
                       <select
                         value={profile.family}
-                        onChange={(event) =>
+                        onChange={(event) => {
+                          const family = event.currentTarget
+                            .value as ProviderFamily;
                           updateProfile(id, {
-                            family: event.currentTarget.value as ProviderFamily,
-                          })
-                        }
+                            family,
+                            ...(profile.endpoint ===
+                            DEFAULT_PROVIDER_ENDPOINTS[profile.family]
+                              ? { endpoint: DEFAULT_PROVIDER_ENDPOINTS[family] }
+                              : {}),
+                          });
+                        }}
                       >
                         <option value="openai-compatible">
                           OpenAI compatible
@@ -249,6 +532,16 @@ export function OptionsApp() {
                       }
                     />
                   </label>
+                  <ModelCatalog
+                    state={modelCatalogs[id]}
+                    disabled={
+                      profile.apiKey.trim().length === 0 ||
+                      profile.endpoint.trim().length === 0
+                    }
+                    onPull={() => void pullModels(id, profile)}
+                    onSelect={(modelId) => selectModel(id, modelId)}
+                    onUse={(modelId) => useModelForDefaultAlias(id, modelId)}
+                  />
                 </article>
               ))}
             </div>
@@ -275,13 +568,7 @@ export function OptionsApp() {
               type="url"
               value={settings.provider.endpoint}
               onChange={(event) =>
-                setSettings((current) => ({
-                  ...current,
-                  provider: {
-                    ...current.provider,
-                    endpoint: event.currentTarget.value,
-                  },
-                }))
+                updateLegacyProvider({ endpoint: event.currentTarget.value })
               }
             />
           </label>
@@ -295,13 +582,7 @@ export function OptionsApp() {
                 value={settings.provider.apiKey}
                 placeholder="sk-…"
                 onChange={(event) =>
-                  setSettings((current) => ({
-                    ...current,
-                    provider: {
-                      ...current.provider,
-                      apiKey: event.currentTarget.value,
-                    },
-                  }))
+                  updateLegacyProvider({ apiKey: event.currentTarget.value })
                 }
               />
               <button
@@ -320,13 +601,9 @@ export function OptionsApp() {
               <input
                 value={settings.provider.organization}
                 onChange={(event) =>
-                  setSettings((current) => ({
-                    ...current,
-                    provider: {
-                      ...current.provider,
-                      organization: event.currentTarget.value,
-                    },
-                  }))
+                  updateLegacyProvider({
+                    organization: event.currentTarget.value,
+                  })
                 }
               />
             </label>
@@ -335,17 +612,21 @@ export function OptionsApp() {
               <input
                 value={settings.provider.project}
                 onChange={(event) =>
-                  setSettings((current) => ({
-                    ...current,
-                    provider: {
-                      ...current.provider,
-                      project: event.currentTarget.value,
-                    },
-                  }))
+                  updateLegacyProvider({ project: event.currentTarget.value })
                 }
               />
             </label>
           </div>
+          <ModelCatalog
+            state={modelCatalogs["legacy-openai"]}
+            disabled={
+              legacyProfile.apiKey.trim().length === 0 ||
+              legacyProfile.endpoint.trim().length === 0
+            }
+            onPull={() => void pullModels("legacy-openai", legacyProfile)}
+            onSelect={(modelId) => selectModel("legacy-openai", modelId)}
+            onUse={(modelId) => useModelForDefaultAlias(undefined, modelId)}
+          />
         </section>
 
         <section>
@@ -699,7 +980,7 @@ export function OptionsApp() {
             </nav>
           ) : null}
           <ol className="audit-list">
-            {[...(audit?.persistent ?? []), ...(audit?.session ?? [])]
+            {auditEvents
               .sort((left, right) => right.timestamp - left.timestamp)
               .slice(0, 12)
               .map((event) => (
@@ -729,9 +1010,22 @@ export function OptionsApp() {
         </section>
 
         {error ? <div className="error">{error}</div> : null}
-        <footer>
-          <span>{status}</span>
-          <button type="submit">Save settings</button>
+        <footer
+          className={`save-bar${saveBarVisible ? " is-visible" : ""}`}
+          aria-hidden={!saveBarVisible}
+        >
+          <span>
+            {savePhase === "saving"
+              ? "Saving…"
+              : savePhase === "saved"
+                ? "Settings saved"
+                : savePhase === "error"
+                  ? "Settings not saved"
+                  : "Unsaved changes"}
+          </span>
+          <button type="submit" disabled={!dirty || savePhase === "saving"}>
+            {savePhase === "saving" ? "Saving…" : "Save settings"}
+          </button>
         </footer>
       </form>
 

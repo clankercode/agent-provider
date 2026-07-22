@@ -40,6 +40,24 @@ describe("extension provider settings", () => {
     expect(settings.aliases.reasoning?.profileId).toBe("custom");
   });
 
+  it("preserves an incomplete profile so endpoint setup can be saved before a key", () => {
+    const settings = normalizeSettings({
+      profiles: {
+        anthropic: {
+          family: "anthropic-compatible",
+          endpoint: "https://api.anthropic.com/",
+          apiKey: "",
+        },
+      },
+    });
+    expect(settings.profiles.anthropic).toEqual({
+      id: "anthropic",
+      family: "anthropic-compatible",
+      endpoint: "https://api.anthropic.com/",
+      apiKey: "",
+    });
+  });
+
   it("drops unsafe profiles and does not retain dangling profile authority", () => {
     const settings = normalizeSettings({
       profiles: {

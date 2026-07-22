@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import type { LanguageModelV4CallOptions } from "@ai-sdk/provider";
 import { describe, expect, it } from "vitest";
 import { createProviderAdapter } from "./provider-adapters.js";
+import { listProviderModels } from "./provider-models.js";
 import type {
   ProviderAlias,
   ProviderFamily,
@@ -22,12 +23,12 @@ const CASES: Array<{
   {
     family: "openai-compatible",
     endpoint: "https://***REMOVED***/v1",
-    modelId: "gpt-5.4-mini",
+    modelId: "MiniMax-M2.7-highspeed",
   },
   {
     family: "anthropic-compatible",
     endpoint: "https://***REMOVED***/",
-    modelId: "MiniMax-M2.7",
+    modelId: "MiniMax-M2.7-highspeed",
   },
 ];
 
@@ -75,10 +76,16 @@ async function generateWithCredentialFallback(
     };
 
     try {
+      const models = await listProviderModels(profile, { fetch: trackedFetch });
+      if (!models.some((model) => model.id === providerCase.modelId)) {
+        throw new Error(
+          `The live provider catalog does not include ${providerCase.modelId}.`,
+        );
+      }
       const result = await createProviderAdapter(profile, {
         fetch: trackedFetch,
       }).generate(alias, callOptions, new AbortController().signal);
-      return { result, usedFallback: index > 0 };
+      return { modelCount: models.length, result, usedFallback: index > 0 };
     } catch (error) {
       lastError = error;
       if (!authenticationFailed || index === KEY_PATHS.length - 1) throw error;
@@ -92,7 +99,7 @@ describe("live provider adapters", () => {
   it.each(CASES)(
     "generates through $family without exposing credentials",
     async (providerCase) => {
-      const { result, usedFallback } =
+      const { modelCount, result, usedFallback } =
         await generateWithCredentialFallback(providerCase);
       const text = result.content
         .filter((part) => part.type === "text")
@@ -102,6 +109,7 @@ describe("live provider adapters", () => {
 
       expect(text.length).toBeGreaterThan(0);
       expect(result.finishReason.unified).toMatch(/^(stop|length)$/u);
+      expect(modelCount).toBeGreaterThan(0);
       expect(typeof usedFallback).toBe("boolean");
     },
   );

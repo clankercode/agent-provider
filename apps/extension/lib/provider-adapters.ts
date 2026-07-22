@@ -7,10 +7,8 @@ import type {
   LanguageModelV4GenerateResult,
   LanguageModelV4StreamResult,
 } from "@ai-sdk/provider";
-import {
-  createCredentialedProviderFetch,
-  type ProviderCredentialHeaders,
-} from "./provider-endpoint.js";
+import { createCredentialedProviderFetch } from "./provider-endpoint.js";
+import { providerCredentials } from "./provider-credentials.js";
 import {
   resolveProviderProfile,
   type ProviderAlias,
@@ -46,18 +44,6 @@ export interface ProviderAdapter {
   ): Promise<LanguageModelV4StreamResult>;
 }
 
-function credentialFor(profile: ProviderProfile): ProviderCredentialHeaders {
-  if (profile.family === "openai-compatible") {
-    return {
-      family: profile.family,
-      apiKey: profile.apiKey,
-      ...(profile.organization ? { organization: profile.organization } : {}),
-      ...(profile.project ? { project: profile.project } : {}),
-    };
-  }
-  return { family: profile.family, apiKey: profile.apiKey };
-}
-
 function providerSdkBaseUrl(
   profile: ProviderProfile,
   endpoint: string,
@@ -86,7 +72,7 @@ function createSdkModel(
   }
   const providerFetch = createCredentialedProviderFetch({
     endpoint: resolved.canonicalEndpoint,
-    credential: credentialFor(profile),
+    credential: providerCredentials(profile),
     ...(nativeFetch === undefined ? {} : { fetch: nativeFetch }),
   });
 

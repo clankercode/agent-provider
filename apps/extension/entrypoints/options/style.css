@@ -1,13 +1,13 @@
 :root {
   color-scheme: light dark;
-  --canvas: #f3f0e8;
-  --surface: #fffdf7;
+  --canvas: #f4f1ea;
+  --surface: #fffdf8;
   --raised: #fff;
-  --ink: #15231f;
-  --muted: #61706a;
-  --line: #d9ddd5;
-  --authority: #15745e;
-  --authority-soft: #dff3eb;
+  --ink: #202633;
+  --muted: #6b7280;
+  --line: #d8d9dc;
+  --authority: #3457a1;
+  --authority-soft: #e8edfa;
   --caution: #a25d12;
   --caution-soft: #fff0d6;
   --danger: #b13a4a;
@@ -102,7 +102,7 @@ aside {
   border-radius: 16px;
   padding: 22px;
   background: var(--surface);
-  box-shadow: 0 16px 42px rgb(29 54 45 / 0.055);
+  box-shadow: 0 16px 42px rgb(31 38 51 / 0.06);
 }
 section + section {
   margin-top: 16px;
@@ -116,6 +116,17 @@ footer,
   align-items: center;
   justify-content: space-between;
   gap: 14px;
+}
+.provider-add-actions {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(3, auto);
+  gap: 6px;
+}
+.provider-add-actions button {
+  padding: 8px 10px;
+  white-space: nowrap;
+  font-size: 12px;
 }
 
 .eyebrow {
@@ -152,6 +163,52 @@ footer,
 }
 .profile-grid {
   grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.5fr);
+}
+.model-catalog {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.model-catalog-heading,
+.model-catalog-result {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+}
+.model-catalog-heading > div {
+  display: grid;
+  gap: 2px;
+}
+.model-catalog-heading strong {
+  font-size: 13px;
+}
+.model-catalog-heading span,
+.catalog-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+.model-catalog-result label {
+  min-width: 0;
+  flex: 1;
+}
+.model-catalog-result button,
+.model-catalog-heading button {
+  white-space: nowrap;
+}
+.catalog-error,
+.catalog-empty {
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 9px 10px;
+  background: var(--canvas);
+}
+.catalog-error {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12px;
 }
 .empty-state {
   display: grid;
@@ -336,20 +393,37 @@ button:disabled {
   font-size: 12px;
 }
 
-footer {
-  position: sticky;
-  z-index: 2;
-  bottom: 12px;
-  margin-top: 16px;
-  border: 1px solid var(--line);
+footer.save-bar {
+  position: fixed;
+  z-index: 10;
+  left: 50%;
+  bottom: 18px;
+  width: min(760px, calc(100% - 32px));
+  border: 1px solid color-mix(in srgb, var(--raised) 25%, transparent);
   border-radius: 13px;
   padding: 11px 13px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
-  backdrop-filter: blur(14px);
+  background: var(--ink);
+  box-shadow: 0 18px 50px rgb(10 15 28 / 0.28);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, calc(100% + 40px));
+  visibility: hidden;
+  transition:
+    transform 180ms cubic-bezier(0.2, 0.75, 0.25, 1),
+    opacity 140ms ease,
+    visibility 0s linear 180ms;
+}
+footer.save-bar.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0);
+  visibility: visible;
+  transition-delay: 0s;
 }
 footer span {
-  color: var(--muted);
+  color: var(--surface);
   font-size: 13px;
+  font-weight: 750;
 }
 .error {
   border: 1px solid var(--danger);
@@ -369,14 +443,14 @@ aside p {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --canvas: #0d1514;
-    --surface: #121d1b;
-    --raised: #182522;
-    --ink: #eef5f0;
-    --muted: #9daea8;
-    --line: #2c3b37;
-    --authority: #62d1ad;
-    --authority-soft: #173b31;
+    --canvas: #0d1118;
+    --surface: #131923;
+    --raised: #1a2230;
+    --ink: #f0f2f6;
+    --muted: #a3acba;
+    --line: #303949;
+    --authority: #93afff;
+    --authority-soft: #202e54;
     --caution: #f1b765;
     --caution-soft: #3d2d17;
     --danger: #ff8794;
@@ -384,10 +458,10 @@ aside p {
   }
   .mark {
     background: var(--authority);
-    color: #09231b;
+    color: #10172a;
   }
   button {
-    color: #09231b;
+    color: #10172a;
   }
 }
 
@@ -414,6 +488,19 @@ aside p {
   }
   .section-heading > button {
     white-space: nowrap;
+  }
+  .provider-add-actions {
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .model-catalog-heading,
+  .model-catalog-result {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .model-catalog-heading button,
+  .model-catalog-result button {
+    width: 100%;
   }
 }
 

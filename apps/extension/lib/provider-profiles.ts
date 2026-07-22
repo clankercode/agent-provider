@@ -8,6 +8,14 @@ import {
 export type ProviderFamily =
   "openai-compatible" | "anthropic-compatible" | "gemini";
 
+export const DEFAULT_PROVIDER_ENDPOINTS: Readonly<
+  Record<ProviderFamily, string>
+> = Object.freeze({
+  "openai-compatible": "https://api.openai.com/v1/",
+  "anthropic-compatible": "https://api.anthropic.com/",
+  gemini: "https://generativelanguage.googleapis.com/v1beta/",
+});
+
 export interface ProviderProfile {
   id: string;
   family: ProviderFamily;

@@ -1,13 +1,13 @@
 :root {
   color-scheme: light dark;
-  --canvas: #f3f0e8;
-  --surface: #fffdf7;
+  --canvas: #f4f1ea;
+  --surface: #fffdf8;
   --raised: #fff;
-  --ink: #15231f;
-  --muted: #61706a;
-  --line: #d9ddd5;
-  --authority: #15745e;
-  --authority-soft: #dff3eb;
+  --ink: #202633;
+  --muted: #6b7280;
+  --line: #d8d9dc;
+  --authority: #3457a1;
+  --authority-soft: #e8edfa;
   --caution: #a25d12;
   --caution-soft: #fff0d6;
   --danger: #b13a4a;
@@ -197,14 +197,14 @@ button:focus-visible {
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --canvas: #0d1514;
-    --surface: #121d1b;
-    --raised: #182522;
-    --ink: #eef5f0;
-    --muted: #9daea8;
-    --line: #2c3b37;
-    --authority: #62d1ad;
-    --authority-soft: #173b31;
+    --canvas: #0d1118;
+    --surface: #131923;
+    --raised: #1a2230;
+    --ink: #f0f2f6;
+    --muted: #a3acba;
+    --line: #303949;
+    --authority: #93afff;
+    --authority-soft: #202e54;
     --caution: #f1b765;
     --caution-soft: #3d2d17;
     --danger: #ff8794;
@@ -212,10 +212,10 @@ button:focus-visible {
   }
   .mark {
     background: var(--authority);
-    color: #09231b;
+    color: #10172a;
   }
   button {
-    color: #09231b;
+    color: #10172a;
   }
 }
 @media (prefers-reduced-motion: reduce) {

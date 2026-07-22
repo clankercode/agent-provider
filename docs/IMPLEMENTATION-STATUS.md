@@ -22,8 +22,11 @@ release and should not be described as generally production-ready.
   timeouts, concurrency limits, result scrubbing, and extension-owned popup,
   approval, and settings surfaces.
 - OpenAI-compatible, Anthropic-compatible, and Gemini adapter seams. Fixture
-  tests cover all three. Authorized live generation covers OpenAI-compatible
-  and Anthropic-compatible gateways without persisting credentials.
+  tests cover all three. Settings include family-specific endpoint presets and
+  bounded, paginated, on-demand model discovery with manual-ID fallback.
+  Authorized live catalog discovery and generation cover OpenAI-compatible and
+  Anthropic-compatible gateways with `MiniMax-M2.7-highspeed` without
+  persisting credentials.
 - Durable per-origin request, token, and cost reservations in IndexedDB,
   conservative unknown-outcome settlement across MV3 worker restarts, and
   concurrency bounds.
@@ -36,6 +39,9 @@ release and should not be described as generally production-ready.
 - Actual unpacked Chrome bootstrap/session-open browser smoke, exact localhost
   origin rejection, live provider generation, and visual QA for dashboard,
   popup, approval, and settings in desktop/mobile light/dark modes.
+- The settings save bar appears only for dirty, saving, saved, or failed state;
+  it clears its saved receipt automatically and uses visible enter/exit motion
+  with a reduced-motion path.
 - Clean Chrome MV3 and Firefox MV3 production builds. Firefox runs an actual
   extension bootstrap smoke in system Firefox in addition to `web-ext lint`.
 - Packed npm consumer tests install all six public packages from tarballs and

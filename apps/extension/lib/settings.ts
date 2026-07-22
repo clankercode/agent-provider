@@ -179,7 +179,7 @@ function normalizeProfiles(value: unknown): Record<string, ProviderProfile> {
     if (!/^[a-z][a-z0-9_-]{0,63}$/i.test(id) || !isRecord(raw)) continue;
     if (!PROVIDER_FAMILIES.has(raw.family as ProviderFamily)) continue;
     const apiKey = boundedString(raw.apiKey, 4_096);
-    if (apiKey.length === 0 || typeof raw.endpoint !== "string") continue;
+    if (typeof raw.endpoint !== "string") continue;
     try {
       const endpoint = canonicalizeProviderEndpoint(raw.endpoint).url;
       const options = authorityOptions(raw.authorityOptions);

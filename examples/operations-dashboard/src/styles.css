@@ -1,12 +1,12 @@
 :root {
   color-scheme: light dark;
-  --canvas: #f3f0e8;
+  --canvas: #f4f1ea;
   --surface: #ffffff;
-  --surface-soft: #fffdf7;
-  --ink: #17201d;
-  --muted: #6d7c76;
-  --line: #dce1dd;
-  --authority: #15745e;
+  --surface-soft: #fffdf8;
+  --ink: #202633;
+  --muted: #6b7280;
+  --line: #d8d9dc;
+  --authority: #3457a1;
   font:
     15px/1.45 Inter,
     ui-sans-serif,
@@ -95,7 +95,7 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--surface);
-  box-shadow: 0 12px 35px rgb(33 53 45 / 0.06);
+  box-shadow: 0 12px 35px rgb(31 38 51 / 0.06);
 }
 
 .metrics article {
@@ -179,13 +179,13 @@ th {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --canvas: #0d1514;
-    --surface: #121d1b;
-    --surface-soft: #182522;
-    --ink: #eef5f0;
-    --muted: #9daea8;
-    --line: #2c3b37;
-    --authority: #62d1ad;
+    --canvas: #0d1118;
+    --surface: #131923;
+    --surface-soft: #1a2230;
+    --ink: #f0f2f6;
+    --muted: #a3acba;
+    --line: #303949;
+    --authority: #93afff;
   }
 
   .metrics article,

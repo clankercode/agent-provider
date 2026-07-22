@@ -57,6 +57,12 @@ implementation choice to weaken the stated outcome.
   versioned wire protocol is the expected implementation, not the only one.
 - **FR-15:** Before results reach page code, the extension must remove raw
   transport bodies/headers/chunks and redact credential-like metadata.
+- **FR-24:** Extension settings must provide first-class OpenAI-compatible,
+  Anthropic-compatible, and Gemini profile endpoint presets while retaining
+  custom endpoints. A user must be able to pull a bounded model catalog from a
+  configured provider on demand and apply a discovered model to an alias;
+  credentials and raw provider error bodies must remain extension-owned, and
+  manual model identifiers must remain available when discovery is unsupported.
 
 ## Permission, execution, and audit
 

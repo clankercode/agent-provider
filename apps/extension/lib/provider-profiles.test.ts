@@ -1,8 +1,19 @@
 import { describe, expect, it } from "vitest";
 import { providerAlias, PROVIDER_PROFILES } from "./fixtures/providers.js";
-import { fingerprintProviderAlias } from "./provider-profiles.js";
+import {
+  DEFAULT_PROVIDER_ENDPOINTS,
+  fingerprintProviderAlias,
+} from "./provider-profiles.js";
 
 describe("provider alias fingerprints", () => {
+  it("defines canonical settings presets for every supported family", () => {
+    expect(DEFAULT_PROVIDER_ENDPOINTS).toEqual({
+      "openai-compatible": "https://api.openai.com/v1/",
+      "anthropic-compatible": "https://api.anthropic.com/",
+      gemini: "https://generativelanguage.googleapis.com/v1beta/",
+    });
+  });
+
   it("is stable across key rotation and equivalent endpoint spellings", async () => {
     const profile = PROVIDER_PROFILES.openai!;
     const alias = providerAlias(profile.id);
