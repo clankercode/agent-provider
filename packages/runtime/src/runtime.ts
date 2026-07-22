@@ -131,6 +131,9 @@ export class AgentProviderRuntime {
 
     this.agent = new ToolLoopAgent({
       model: this.model,
+      // Page context is refreshed per turn, so it is supplied as a system
+      // message rather than the constructor-only static instructions field.
+      allowSystemInMessages: true,
       ...(options.instructions === undefined
         ? {}
         : { instructions: options.instructions }),
