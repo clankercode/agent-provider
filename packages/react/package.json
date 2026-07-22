@@ -3,6 +3,19 @@
   "version": "0.1.0",
   "description": "React bindings and reference chat surface for Agent Provider.",
   "license": "CC0-1.0 OR Unlicense",
+  "keywords": [
+    "browser",
+    "llm",
+    "react",
+    "agent-provider"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "type": "module",
   "sideEffects": [
     "./dist/styles.css"
@@ -17,7 +30,11 @@
     "./styles.css": "./dist/styles.css"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE",
+    "LICENSE-CC0",
+    "UNLICENSE"
   ],
   "scripts": {
     "build": "tsup src/index.ts --format esm --sourcemap --clean && cp src/styles.css dist/styles.css && tsc -p tsconfig.build.json --emitDeclarationOnly",

@@ -21,10 +21,11 @@
     "build": "npm run build:packages && npm run build:extension && npm run build:firefox && npm run build:example",
     "typecheck": "npm run build:packages && npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:packages": "node scripts/test-packed-packages.mjs",
     "test:live": "npm run test:live -w agent-provider-extension",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "npm run format:check && npm run typecheck && npm run test && npm run build",
+    "check": "npm run format:check && npm run typecheck && npm run test && npm run build && npm run test:packages",
     "dev:extension": "npm run dev -w agent-provider-extension",
     "dev:example": "npm run dev -w agent-provider-operations-dashboard"
   },
