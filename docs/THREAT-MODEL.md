@@ -13,6 +13,11 @@ trusts every script capable of executing on the exact origin.
 
 ## Required controls
 
+This section is the target security contract. The alpha does not yet enforce
+every item; the precise gap list is maintained in
+[implementation status](IMPLEMENTATION-STATUS.md) and
+[future concerns](FUTURE-CONCERNS.md).
+
 - Exact runtime sender-origin derivation and build-time application coverage.
 - Stable bootstrap plus versioned, bounded, correlated messages.
 - Extension-owned credentials and provider fetches; no arbitrary page headers,
@@ -49,3 +54,6 @@ trusts every script capable of executing on the exact origin.
 - Cancellation after dispatch is best effort; `outcome-unknown` requires
   provider or application reconciliation.
 - Provider privacy and retention are governed by the user's provider account.
+- The current alpha does not yet wire durable quotas, audit-first/private mode,
+  persistent audit UI, or per-step extension approvals into the background
+  request lifecycle.

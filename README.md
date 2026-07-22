@@ -6,7 +6,8 @@ and callbacks; a browser extension supplies exact-origin, policy-constrained
 access to a user-configured model provider.
 
 This repository is an active alpha. Chrome is the required browser and Firefox
-is the parity target. Safari is best-effort.
+is the parity target. Safari is not currently supported. See
+[implementation status](docs/IMPLEMENTATION-STATUS.md) before deployment.
 
 ## Workspace
 
@@ -16,8 +17,8 @@ is the parity target. Safari is best-effort.
 - `@agent-provider/ai-sdk` — advanced AI SDK `LanguageModel` bridge.
 - `@agent-provider/react` — React bindings and reference UI.
 - `@agent-provider/webmcp` — optional explicit WebMCP adapter.
-- `apps/extension` — credentials, grants, policy, providers, audit, and browser
-  control surfaces.
+- `apps/extension` — credentials, exact-origin grants, provider brokering,
+  policy/audit primitives, and browser control surfaces.
 - `examples/operations-dashboard` — runnable trusted-app example.
 
 ## Development
@@ -38,6 +39,12 @@ The development build is limited to the exact application matches in
 Provider credentials are configured in the extension, never in page code.
 Expected provider, policy, permission, cancellation, and bridge failures are
 returned as structured outcomes.
+
+The current alpha enforces exact-origin consent, alias authority fingerprints,
+per-call size/token/concurrency/time limits, provider destination checks, and
+result scrubbing. Durable quotas, audit-first/private execution, persistent
+audit controls, and extension approval for each model/tool step remain explicit
+production blockers rather than implicit promises.
 
 ## Security model
 

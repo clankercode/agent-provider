@@ -1,0 +1,12 @@
+{
+  "artifact_id": "artifact-extension-review",
+  "node_id": "extension",
+  "kind": "review",
+  "summary_path": "reviews/extension-review.md",
+  "raw_path": "reviews/extension-review.md",
+  "hash": "sha256:efc4a0be7e03b127e7baa67d034f9f65c50d5ccb8fa46246f4c69fb48fb3b28e",
+  "bytes": 1072,
+  "created_by": "codex-coordinator",
+  "created_at": "2026-07-22T17:40:13Z",
+  "redaction_status": "none"
+}

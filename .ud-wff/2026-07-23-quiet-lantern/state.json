@@ -1,0 +1,258 @@
+{
+  "assumptions": {},
+  "events_seen": 72,
+  "issues": {},
+  "protocol_version": "udwff/v1",
+  "questions": {},
+  "run_id": "2026-07-23-quiet-lantern",
+  "schema_version": "1.1.0",
+  "status": "intake",
+  "tasks": {
+    "task-consumers": {
+      "artifact_path": "artifacts/consumers-output.json",
+      "history": [
+        {
+          "event_id": "evt_f4b2e571d9fe1025b92f26355acc53cc",
+          "event_type": "TaskPlanned"
+        },
+        {
+          "event_id": "evt_065ae0a12ad50f3c5198899846c52e98",
+          "event_type": "TaskAssigned"
+        },
+        {
+          "event_id": "evt_d808a18c7b92ab2d96ac86b436e8bcd3",
+          "event_type": "TaskStarted"
+        },
+        {
+          "event_id": "evt_a94382396a81069f0fd1e39b229b5b3a",
+          "event_type": "TaskOutputWritten"
+        },
+        {
+          "event_id": "evt_566e365b2e90206bf6f8bb2a3bf0e067",
+          "event_type": "ReviewRequested"
+        },
+        {
+          "event_id": "evt_99a6b3111f30ca4ce6034bbc0f3074c8",
+          "event_type": "ReviewRecorded"
+        },
+        {
+          "event_id": "evt_81ec4f52c81fbbbcf2fb85fb37f4eaaf",
+          "event_type": "TaskCompleted"
+        }
+      ],
+      "node_id": "consumers",
+      "owner": "codex-coordinator",
+      "review": {
+        "artifact_path": "artifacts/consumers-review.json",
+        "attempted_criticisms": [
+          "visual inconsistency",
+          "mobile clipping",
+          "mocked extension presence",
+          "context secret leakage"
+        ],
+        "review_path": "reviews/consumers-review.md",
+        "verdict": "pass"
+      },
+      "status": "done",
+      "task_id": "task-consumers",
+      "title": "React, vanilla, WebMCP, and sample application"
+    },
+    "task-core": {
+      "artifact_path": "artifacts/core-output.json",
+      "history": [
+        {
+          "event_id": "evt_e26896e74563a6ff77c402cfbeb76165",
+          "event_type": "TaskPlanned"
+        },
+        {
+          "event_id": "evt_7c719db0924391f8738fbe0d2b39bdc6",
+          "event_type": "TaskAssigned"
+        },
+        {
+          "event_id": "evt_848dda78228e83ccdfdc02292ef5d95a",
+          "event_type": "TaskStarted"
+        },
+        {
+          "event_id": "evt_8d801536d41fc126437ccda4a6f042ab",
+          "event_type": "TaskOutputWritten"
+        },
+        {
+          "event_id": "evt_4bc59e6003b4696a11c6ad93b1eff052",
+          "event_type": "ReviewRequested"
+        },
+        {
+          "event_id": "evt_9d786d7d81063ddf78bf3185cdc8e680",
+          "event_type": "ReviewRecorded"
+        },
+        {
+          "event_id": "evt_363c9d8ef5bd1b7d83b606bce8aa5ae4",
+          "event_type": "TaskCompleted"
+        }
+      ],
+      "node_id": "core",
+      "owner": "codex-coordinator",
+      "review": {
+        "artifact_path": "artifacts/core-review.json",
+        "attempted_criticisms": [
+          "reflected bootstrap traffic",
+          "React StrictMode lifecycle",
+          "mutable context boundaries",
+          "WebMCP metadata bypass"
+        ],
+        "review_path": "reviews/core-review.md",
+        "verdict": "pass"
+      },
+      "status": "done",
+      "task_id": "task-core",
+      "title": "Protocol, context, runtime, and AI SDK packages"
+    },
+    "task-extension": {
+      "artifact_path": "artifacts/extension-output.json",
+      "history": [
+        {
+          "event_id": "evt_f9ad6b34f4d959e57cb9e95c2d9c6c9d",
+          "event_type": "TaskPlanned"
+        },
+        {
+          "event_id": "evt_d45aa022a349b3ff51bbbc09e499fa48",
+          "event_type": "TaskAssigned"
+        },
+        {
+          "event_id": "evt_206ed34974d9b0409ae68eb1e6cb2891",
+          "event_type": "TaskStarted"
+        },
+        {
+          "event_id": "evt_9191f7d75431a777d486bbf7a76b3eca",
+          "event_type": "TaskOutputWritten"
+        },
+        {
+          "event_id": "evt_4c0a1fd8f46f74f517a6210d01b38f91",
+          "event_type": "ReviewRequested"
+        },
+        {
+          "event_id": "evt_50fe60af8beed23a78cb4e1f61aec0e1",
+          "event_type": "ReviewRecorded"
+        },
+        {
+          "event_id": "evt_0e95637957294574268de21dcccd89e4",
+          "event_type": "TaskCompleted"
+        }
+      ],
+      "node_id": "extension",
+      "owner": "codex-coordinator",
+      "review": {
+        "artifact_path": "artifacts/extension-review.json",
+        "attempted_criticisms": [
+          "arbitrary credential egress",
+          "alias authority expansion",
+          "page-spoofed consent",
+          "raw provider leakage",
+          "overclaiming unwired controls"
+        ],
+        "review_path": "reviews/extension-review.md",
+        "verdict": "pass"
+      },
+      "status": "done",
+      "task_id": "task-extension",
+      "title": "Extension authority, policy, audit, and providers"
+    },
+    "task-foundation": {
+      "artifact_path": "artifacts/foundation-output.json",
+      "history": [
+        {
+          "event_id": "evt_5213aa6312d32965e0f8cceedd338abc",
+          "event_type": "TaskPlanned"
+        },
+        {
+          "event_id": "evt_3553b2ca02adfad75c456e964acc6528",
+          "event_type": "TaskAssigned"
+        },
+        {
+          "event_id": "evt_2034092039384a9a08fce39da1ddc8ad",
+          "event_type": "TaskStarted"
+        },
+        {
+          "event_id": "evt_390939dc6cddfc85ee603c1a42f9500d",
+          "event_type": "TaskOutputWritten"
+        },
+        {
+          "event_id": "evt_1054783a1ea39d02f252eb1b1a79bc47",
+          "event_type": "ReviewRequested"
+        },
+        {
+          "event_id": "evt_71d5056e3fb28c1128ec5f10f33143c7",
+          "event_type": "ReviewRecorded"
+        },
+        {
+          "event_id": "evt_a74618b70efd606d3b390ba8ef831f67",
+          "event_type": "TaskCompleted"
+        }
+      ],
+      "node_id": "foundation",
+      "owner": "codex-coordinator",
+      "review": {
+        "artifact_path": "artifacts/foundation-review.json",
+        "attempted_criticisms": [
+          "licensing and provenance ambiguity",
+          "non-durable plan",
+          "non-buildable workspace"
+        ],
+        "review_path": "reviews/foundation-review.md",
+        "verdict": "pass"
+      },
+      "status": "done",
+      "task_id": "task-foundation",
+      "title": "Durable design and workspace foundation"
+    },
+    "task-verification": {
+      "artifact_path": "artifacts/verification-output.json",
+      "history": [
+        {
+          "event_id": "evt_2d3ba5725eed9e1c9da17066e6e3a1da",
+          "event_type": "TaskPlanned"
+        },
+        {
+          "event_id": "evt_32cb16d2e21d26dac2e808bb5e0564d3",
+          "event_type": "TaskAssigned"
+        },
+        {
+          "event_id": "evt_85772cec55377e7543e92f31629c6111",
+          "event_type": "TaskStarted"
+        },
+        {
+          "event_id": "evt_f89a1790c01d325ceca2898c2442770a",
+          "event_type": "TaskOutputWritten"
+        },
+        {
+          "event_id": "evt_deb624b0a76cb6c5a6ad8c8937835e78",
+          "event_type": "ReviewRequested"
+        },
+        {
+          "event_id": "evt_02bd6113f7eb72fae9d5b9bd1e330dfb",
+          "event_type": "ReviewRecorded"
+        },
+        {
+          "event_id": "evt_9f61168413ec436901bd8a731b117f94",
+          "event_type": "TaskCompleted"
+        }
+      ],
+      "node_id": "verification",
+      "owner": "codex-coordinator",
+      "review": {
+        "artifact_path": "artifacts/verification-review.json",
+        "attempted_criticisms": [
+          "live test contamination",
+          "unsafe credential fallback",
+          "fake browser smoke",
+          "Firefox evidence overclaim",
+          "production readiness overclaim"
+        ],
+        "review_path": "reviews/verification-review.md",
+        "verdict": "pass"
+      },
+      "status": "done",
+      "task_id": "task-verification",
+      "title": "Cross-browser verification, review, and release artifacts"
+    }
+  }
+}

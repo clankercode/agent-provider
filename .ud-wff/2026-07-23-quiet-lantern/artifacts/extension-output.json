@@ -1,0 +1,12 @@
+{
+  "artifact_id": "artifact-extension-output",
+  "node_id": "extension",
+  "kind": "output",
+  "summary_path": "artifacts/extension-summary.md",
+  "raw_path": "artifacts/extension-summary.md",
+  "hash": "sha256:bb000644529096ba1bb0ef1ecc733a0fe3e02088d2f7f617ce0b498821ba8b3e",
+  "bytes": 838,
+  "created_by": "codex-coordinator",
+  "created_at": "2026-07-22T17:40:13Z",
+  "redaction_status": "none"
+}

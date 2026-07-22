@@ -1,0 +1,12 @@
+{
+  "artifact_id": "artifact-consumers-review",
+  "node_id": "consumers",
+  "kind": "review",
+  "summary_path": "reviews/consumers-review.md",
+  "raw_path": "reviews/consumers-review.md",
+  "hash": "sha256:a3e43e3c167647a6f2b46bcf3f2ce1cf14bbd038220c9ecbe2ff8b7bbde4a8fb",
+  "bytes": 756,
+  "created_by": "codex-coordinator",
+  "created_at": "2026-07-22T17:40:13Z",
+  "redaction_status": "none"
+}

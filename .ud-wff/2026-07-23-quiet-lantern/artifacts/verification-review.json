@@ -1,0 +1,12 @@
+{
+  "artifact_id": "artifact-verification-review",
+  "node_id": "verification",
+  "kind": "review",
+  "summary_path": "reviews/verification-review.md",
+  "raw_path": "reviews/verification-review.md",
+  "hash": "sha256:48972956a81c753b3cc08d8ef9290aef26702a83c5644a5fe6d704add64407c9",
+  "bytes": 831,
+  "created_by": "codex-coordinator",
+  "created_at": "2026-07-22T17:40:13Z",
+  "redaction_status": "none"
+}

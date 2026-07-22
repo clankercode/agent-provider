@@ -71,6 +71,14 @@ interface PendingPermission {
 
 const pendingPermissions = new Map<string, PendingPermission>();
 
+// TODO(alpha-hardening): The audited QuotaLedger, AuditRecorder, grant-policy,
+// and single-use approval stores in lib/ are deliberate integration seams, not
+// yet background lifecycle enforcement. Before a production claim, wire them
+// around provider dispatch and tool execution exactly as tracked in
+// docs/FUTURE-CONCERNS.md. Current enforcement is exact-origin consent,
+// authority fingerprints, request/concurrency/token bounds, timeouts, and
+// result scrubbing.
+
 function sessionKey(tabId: number, origin: string): string {
   return `${tabId}:${origin}`;
 }

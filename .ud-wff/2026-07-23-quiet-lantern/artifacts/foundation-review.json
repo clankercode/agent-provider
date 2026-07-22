@@ -1,0 +1,12 @@
+{
+  "artifact_id": "artifact-foundation-review",
+  "node_id": "foundation",
+  "kind": "review",
+  "summary_path": "reviews/foundation-review.md",
+  "raw_path": "reviews/foundation-review.md",
+  "hash": "sha256:5c8ab129266bb4eff491b7eb83ab42da9df02c7fc1e814c37d31d3059b0c8a88",
+  "bytes": 543,
+  "created_by": "codex-coordinator",
+  "created_at": "2026-07-22T17:40:13Z",
+  "redaction_status": "none"
+}

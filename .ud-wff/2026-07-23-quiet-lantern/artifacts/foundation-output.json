@@ -1,0 +1,12 @@
+{
+  "artifact_id": "artifact-foundation-output",
+  "node_id": "foundation",
+  "kind": "output",
+  "summary_path": "artifacts/foundation-summary.md",
+  "raw_path": "artifacts/foundation-summary.md",
+  "hash": "sha256:6fcbd688646768061c056a302a70ca13cacf1ffdcab8598b6328627f318c6f68",
+  "bytes": 398,
+  "created_by": "codex-coordinator",
+  "created_at": "2026-07-22T17:40:13Z",
+  "redaction_status": "none"
+}
