@@ -12,9 +12,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@agent-provider/context": "0.1.1",
-    "@agent-provider/runtime": "0.1.1",
-    "@agent-provider/react": "0.1.1",
+    "@agent-provider/context": "0.1.2",
+    "@agent-provider/runtime": "0.1.2",
+    "@agent-provider/react": "0.1.2",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "zod": "^4.4.3"
