@@ -28,9 +28,14 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run test:packages
+      # Branded Google Chrome >= 137 removed --load-extension (and the
+      # runner image ships branded Chrome), which the extension smoke test
+      # needs. Run it against a pinned real Chromium build instead.
+      - name: Install Chromium for extension smoke test
+        run: npx --yes @puppeteer/browsers install chromium@1666776 --path "$RUNNER_TEMP/browsers"
       - name: Chrome extension smoke
         run: |
-          CHROMIUM_PATH="$(command -v google-chrome || command -v chromium)"
+          CHROMIUM_PATH="$RUNNER_TEMP/browsers/chromium/linux-1666776/chrome-linux/chrome"
           export CHROMIUM_PATH
           xvfb-run -a npm run test:browser
       - name: Firefox extension smoke and lint
