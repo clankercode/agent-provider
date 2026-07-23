@@ -1,6 +1,6 @@
 {
   "name": "agent-provider-extension",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Agent Provider browser extension authority and provider broker.",
   "license": "CC0-1.0 OR Unlicense",
@@ -18,7 +18,7 @@
     "clean": "rm -rf .wxt .output"
   },
   "dependencies": {
-    "@agent-provider/protocol": "0.1.0",
+    "@agent-provider/protocol": "0.1.1",
     "@ai-sdk/anthropic": "^4.0.18",
     "@ai-sdk/google": "^4.0.21",
     "@ai-sdk/openai": "^4.0.17",

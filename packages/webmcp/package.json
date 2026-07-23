@@ -1,6 +1,6 @@
 {
   "name": "@agent-provider/webmcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Optional WebMCP adapter for explicitly exposed Agent Provider tools.",
   "license": "CC0-1.0 OR Unlicense",
   "repository": {
@@ -45,7 +45,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@agent-provider/runtime": "0.1.0",
+    "@agent-provider/runtime": "0.1.1",
     "ai": ">=7.0.34 <8"
   },
   "devDependencies": {

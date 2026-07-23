@@ -1,6 +1,6 @@
 {
   "name": "@agent-provider/context",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Bounded, revisioned, application-controlled page context extraction.",
   "license": "CC0-1.0 OR Unlicense",
   "repository": {

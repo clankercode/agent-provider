@@ -1,6 +1,6 @@
 {
   "name": "@agent-provider/runtime",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Headless page runtime, tool execution, approval, and context lifecycle.",
   "license": "CC0-1.0 OR Unlicense",
   "repository": {
@@ -46,9 +46,9 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@agent-provider/ai-sdk": "0.1.0",
-    "@agent-provider/context": "0.1.0",
-    "@agent-provider/protocol": "0.1.0",
+    "@agent-provider/ai-sdk": "0.1.1",
+    "@agent-provider/context": "0.1.1",
+    "@agent-provider/protocol": "0.1.1",
     "ai": ">=7.0.34 <8"
   },
   "devDependencies": {
