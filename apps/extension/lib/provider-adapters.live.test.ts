@@ -15,8 +15,21 @@ const KEY_PATHS = [
   `${homedir()}/.llmp-key-test-1.bak.20260722152638`,
 ];
 
-// The authorized test gateway is kept out of git; vitest loads it from the
-// repo's gitignored .env (see .env.example).
+// The authorized test gateway is kept out of git. Read it from the
+// environment or the repo's gitignored .env (see .env.example).
+try {
+  const envFile = await readFile(
+    new URL("../../../.env", import.meta.url),
+    "utf8",
+  );
+  for (const line of envFile.split("\n")) {
+    const match = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
+    if (match && process.env[match[1]] === undefined)
+      process.env[match[1]] = match[2];
+  }
+} catch {
+  // No .env file — rely on the process environment.
+}
 const GATEWAY = process.env.AGENT_PROVIDER_LIVE_GATEWAY;
 if (!GATEWAY) {
   throw new Error(
