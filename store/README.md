@@ -17,8 +17,10 @@ obvious secret/build-source paths.
 
 Before submission, the publisher must:
 
-1. publish the privacy policy at a stable HTTPS URL and replace its temporary
-   contact paragraph;
+1. use the privacy policy URL — `PRIVACY.md` is published via GitHub Pages
+   (`.github/workflows/pages.yml`) at
+   https://clankercode.github.io/agent-provider/privacy/ — and replace its
+   temporary contact paragraph;
 2. confirm support URL, publisher identity, category, and listing screenshots;
 3. complete Chrome Web Store and AMO data-use declarations from
    `PRIVACY.md` and `PERMISSIONS.md`;
