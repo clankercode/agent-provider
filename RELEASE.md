@@ -27,6 +27,8 @@ Every push to `master` and every PR also runs the gate via
 From a clean `master`:
 
 ```bash
+just release 0.2.0                # runs the gate, then the steps below
+# or directly:
 npm run release -- 0.2.0          # explicit version
 # or: npm run release -- patch | minor | major
 ```
@@ -36,6 +38,10 @@ and `apps/extension`), re-pins the `@agent-provider/*` dependencies across all
 workspaces, syncs `package-lock.json`, commits `chore: release vX.Y.Z`, and
 tags `vX.Y.Z`. It refuses to run on a dirty tree, off `master`, or when
 `master` differs from its upstream. Then:
+
+`just release` runs the full gate first, then bumps, commits, tags, and
+pushes in one go. The npm variant only bumps, commits, and tags — either way,
+the manual step is:
 
 ```bash
 git push origin master v0.2.0     # the tag push is what publishes

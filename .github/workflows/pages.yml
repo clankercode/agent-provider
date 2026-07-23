@@ -1,0 +1,50 @@
+name: Pages
+
+# Builds _site/ (privacy policy rendered from store/PRIVACY.md via GitHub's
+# markdown API) and deploys it to GitHub Pages. Pages must be set to "GitHub
+# Actions" under Settings → Pages (already configured; build_type=workflow).
+on:
+  push:
+    branches: [master]
+    paths:
+      - "store/PRIVACY.md"
+      - "scripts/build-site.mjs"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build site
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/build-site.mjs
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

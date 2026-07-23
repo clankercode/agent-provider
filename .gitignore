@@ -8,3 +8,4 @@ coverage/
 *.tsbuildinfo
 *.log
 /release/
+/_site/
