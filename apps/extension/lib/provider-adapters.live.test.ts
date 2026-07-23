@@ -15,6 +15,15 @@ const KEY_PATHS = [
   `${homedir()}/.llmp-key-test-1.bak.20260722152638`,
 ];
 
+// The authorized test gateway is kept out of git; vitest loads it from the
+// repo's gitignored .env (see .env.example).
+const GATEWAY = process.env.AGENT_PROVIDER_LIVE_GATEWAY;
+if (!GATEWAY) {
+  throw new Error(
+    "Live provider tests require AGENT_PROVIDER_LIVE_GATEWAY (see .env.example).",
+  );
+}
+
 const CASES: Array<{
   family: ProviderFamily;
   endpoint: string;
@@ -22,12 +31,12 @@ const CASES: Array<{
 }> = [
   {
     family: "openai-compatible",
-    endpoint: "https://***REMOVED***/v1",
+    endpoint: `${GATEWAY}/v1`,
     modelId: "MiniMax-M2.7-highspeed",
   },
   {
     family: "anthropic-compatible",
-    endpoint: "https://***REMOVED***/",
+    endpoint: `${GATEWAY}/`,
     modelId: "MiniMax-M2.7-highspeed",
   },
 ];

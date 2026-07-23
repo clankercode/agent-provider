@@ -61,12 +61,12 @@ notarization are reconciled release operations and are not silently performed
 by local implementation automation.
 
 The authorized local smoke-test configuration reads its API key at runtime from
-`~/.llmp-key-test-1`, uses `https://***REMOVED***/` for the
-Anthropic-compatible adapter, and uses
-`https://***REMOVED***/v1` for the OpenAI-compatible adapter. The
-key must never appear in commands, logs, repository files, workflow events, or
-test artifacts. Gemini remains fixture-tested until a separately authorized
-endpoint is configured.
+`~/.llmp-key-test-1` and its gateway endpoint from `AGENT_PROVIDER_LIVE_GATEWAY`
+(set in the gitignored `.env`; see `.env.example`), using the `/v1` path for the
+OpenAI-compatible adapter and the origin root for the Anthropic-compatible
+adapter. The key and the gateway URL must never appear in commands, logs,
+repository files, workflow events, or test artifacts. Gemini remains
+fixture-tested until a separately authorized endpoint is configured.
 
 If the primary key is rejected for authentication, the runner retries once with
 `~/.llmp-key-test-1.bak.20260722152638`. It reports only which key source

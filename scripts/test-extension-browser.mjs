@@ -12,6 +12,27 @@ const appOrigin = "http://127.0.0.1:5173";
 const untrustedOrigin = "http://127.0.0.1:5174";
 const live = process.argv.includes("--live");
 
+// Live mode needs the authorized test gateway, kept out of git. Read it from
+// the environment or from a gitignored .env file (KEY=VALUE lines).
+if (live) {
+  try {
+    const envFile = await readFile(join(root, ".env"), "utf8");
+    for (const line of envFile.split("\n")) {
+      const match = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
+      if (match && process.env[match[1]] === undefined)
+        process.env[match[1]] = match[2];
+    }
+  } catch {
+    // No .env file — rely on the process environment.
+  }
+  if (!process.env.AGENT_PROVIDER_LIVE_GATEWAY) {
+    throw new Error(
+      "Live mode requires AGENT_PROVIDER_LIVE_GATEWAY (see .env.example).",
+    );
+  }
+}
+const liveGateway = process.env.AGENT_PROVIDER_LIVE_GATEWAY;
+
 await access(join(extensionPath, "manifest.json"));
 
 const server = spawn(
@@ -65,12 +86,12 @@ async function credential(path) {
 
 async function configureLiveProvider(options, apiKey) {
   await options.evaluate(
-    async ({ key }) => {
+    async ({ key, gateway }) => {
       const settings = {
         version: 1,
         provider: {
           kind: "openai",
-          endpoint: "https://***REMOVED***/v1/",
+          endpoint: `${gateway}/v1/`,
           apiKey: key,
           organization: "",
           project: "",
@@ -112,7 +133,7 @@ async function configureLiveProvider(options, apiKey) {
         "agent-provider.settings.v1": settings,
       });
     },
-    { key: apiKey },
+    { key: apiKey, gateway: liveGateway },
   );
 }
 
@@ -301,7 +322,7 @@ try {
     let authenticationFailed = false;
     const watchAuthentication = (response) => {
       if (
-        response.url().startsWith("https://***REMOVED***/") &&
+        response.url().startsWith(`${liveGateway}/`) &&
         (response.status() === 401 || response.status() === 403)
       ) {
         authenticationFailed = true;
