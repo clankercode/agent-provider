@@ -11,7 +11,7 @@ export default defineConfig({
       "https://api.openai.com/*",
       "https://api.anthropic.com/*",
       "https://generativelanguage.googleapis.com/*",
-      "https://***REMOVED***/*",
+      "https://openrouter.ai/*",
     ],
     optional_host_permissions: ["https://*/*"],
     action: {
@@ -28,7 +28,7 @@ export default defineConfig({
       ? {
           browser_specific_settings: {
             gecko: {
-              id: "agent-provider@amaroolabs.com",
+              id: "agent-provider@xk.io",
               data_collection_permissions: {
                 required: [
                   "authenticationInfo",

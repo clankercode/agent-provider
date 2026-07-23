@@ -15,10 +15,10 @@ The extension deliberately does not request the broad `tabs` permission.
 
 ## Required host permissions
 
-The manifest names the exact OpenAI, Anthropic, Gemini, and Amaroo Labs gateway
-origins used for provider traffic. Requests are still restricted to the
-user-selected, canonical provider profile; redirects and unreviewed endpoint
-shapes are rejected.
+The manifest names the exact OpenAI, Anthropic, Gemini, and OpenRouter origins
+used for provider traffic. Requests are still restricted to the user-selected,
+canonical provider profile; redirects and unreviewed endpoint shapes are
+rejected.
 
 ## Optional HTTPS eligibility
 
