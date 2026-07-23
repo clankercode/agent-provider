@@ -1,0 +1,77 @@
+name: Release
+
+# Publishes the @agent-provider/* packages to npm and cuts a GitHub Release
+# when a version tag is pushed. Cut a release with
+# `node scripts/release.mjs X.Y.Z` (bumps versions, commits, tags) then push
+# the tag, or push a `vX.Y.Z` tag yourself. See RELEASE.md.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write # create the GitHub Release
+  id-token: write # OIDC: npm trusted publishing (no NPM_TOKEN secret)
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+
+      - run: npm ci
+
+      # Re-run the full gate: never publish a tag that doesn't pass.
+      - name: Check (format, typecheck, test, build, packed-package tests)
+        run: npm run check
+
+      # Guard: the tag must match the root version, every publishable
+      # package's version, and the pinned @agent-provider/* inter-deps.
+      - name: Verify tag matches package versions
+        run: node scripts/verify-release-version.mjs "${GITHUB_REF_NAME#v}"
+
+      # Trusted publishing requires npm >= 11.5.1; Node 22 ships npm 10.
+      # Pinned deliberately: this step precedes the OIDC publish path, so it
+      # should not float on npm@latest. Bump intentionally.
+      - name: Upgrade npm (for OIDC trusted publishing)
+        run: npm install -g npm@11.5.1
+
+      # No NODE_AUTH_TOKEN: npm exchanges the GitHub OIDC token for a
+      # short-lived publish token and attaches build provenance (the packages
+      # set publishConfig.provenance). Each package needs a one-time trusted
+      # publisher entry pointing at this workflow — see RELEASE.md.
+      # Dependency order matters: dependents pin exact @agent-provider/*
+      # versions, so dependencies must exist on the registry first.
+      # Already-published versions are skipped so a failed run can be retried.
+      - name: Publish packages to npm
+        run: |
+          for pkg in protocol context ai-sdk runtime react webmcp; do
+            name="@agent-provider/$pkg"
+            version="$(node -p "require('./packages/$pkg/package.json').version")"
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version already on npm, skipping"
+            else
+              npm publish -w "$name"
+            fi
+          done
+
+      # Store zips + checksums for the GitHub Release (built from the same
+      # tree; script requires a clean worktree, which CI guarantees).
+      - name: Package store artifacts
+        run: npm run package:stores
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes release/*.zip release/SHA256SUMS

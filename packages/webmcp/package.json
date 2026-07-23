@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "Optional WebMCP adapter for explicitly exposed Agent Provider tools.",
   "license": "CC0-1.0 OR Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clankercode/agent-provider.git",
+    "directory": "packages/webmcp"
+  },
   "keywords": [
     "browser",
     "llm",

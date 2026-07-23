@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "Versioned Agent Provider wire protocol and safe-value codec.",
   "license": "CC0-1.0 OR Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clankercode/agent-provider.git",
+    "directory": "packages/protocol"
+  },
   "keywords": [
     "browser",
     "llm",

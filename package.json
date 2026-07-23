@@ -4,6 +4,10 @@
   "private": true,
   "description": "Browser-mediated, user-controlled model access for trusted web applications.",
   "license": "CC0-1.0 OR Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clankercode/agent-provider.git"
+  },
   "engines": {
     "node": ">=22"
   },
@@ -27,6 +31,7 @@
     "test:firefox": "npm run build:packages && npm run build:firefox && web-ext lint --source-dir apps/extension/.output/firefox-mv3 && node scripts/test-extension-firefox.mjs",
     "capture:ui": "npm run build:extension && node scripts/capture-extension-ui.mjs",
     "package:stores": "node scripts/package-store-release.mjs",
+    "release": "node scripts/release.mjs",
     "test:live": "npm run test:live -w agent-provider-extension",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

@@ -3,6 +3,11 @@
   "version": "0.1.0",
   "description": "AI SDK LanguageModel fulfilled through the Agent Provider extension.",
   "license": "CC0-1.0 OR Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/clankercode/agent-provider.git",
+    "directory": "packages/ai-sdk"
+  },
   "keywords": [
     "browser",
     "llm",
