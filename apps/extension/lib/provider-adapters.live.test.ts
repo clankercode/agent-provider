@@ -24,8 +24,9 @@ try {
   );
   for (const line of envFile.split("\n")) {
     const match = /^([A-Z0-9_]+)=(.*)$/.exec(line.trim());
-    if (match && process.env[match[1]] === undefined)
-      process.env[match[1]] = match[2];
+    const key = match?.[1];
+    if (key !== undefined && process.env[key] === undefined)
+      process.env[key] = match?.[2] ?? "";
   }
 } catch {
   // No .env file — rely on the process environment.
