@@ -61,7 +61,12 @@ Components:
 - `AgentProviderChat` — inline reference chat surface: transcript, composer,
   connection/permission status, approvals, and tool activity.
 - `AgentProviderLauncher` — toggleable button that opens an `AgentProviderChat`
-  panel.
+  panel. The panel stays mounted while closed and fades/slides via CSS
+  (driven by `data-open` on the launcher wrapper), so the transcript
+  survives open/close; this also means the chat's auto-connect probe fires
+  when the launcher mounts, not on first open. To show/hide the whole
+  launcher with the same fade (e.g. while probing for the extension), set
+  `data-visible="false"` on the `.agent-provider-launcher` element.
 
 Hooks (must be used inside `AgentProviderProvider`):
 

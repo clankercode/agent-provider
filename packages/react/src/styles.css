@@ -272,12 +272,49 @@
   align-items: flex-end;
   flex-direction: column;
   gap: 12px;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    visibility 180ms;
+}
+
+/* Consumers that show/hide the whole launcher (e.g. while probing for the
+ * extension) can set data-visible="false" for a fade instead of an abrupt
+ * mount/unmount. visibility flips at the end of the fade-out, so a hidden
+ * launcher stays unreachable by keyboard and screen readers. */
+.agent-provider-launcher[data-visible="false"] {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .agent-provider-launcher__button {
   min-height: 46px;
   padding: 10px 16px;
   box-shadow: 0 14px 40px rgb(0 0 0 / 0.25);
+}
+
+/* The panel stays mounted while closed (data-open on the launcher) and
+ * fades/slides instead of appearing/disappearing abruptly. It is positioned
+ * out of flow above the button so the hidden panel reserves no layout
+ * space (visibility:hidden alone would leave a panel-sized gap). */
+.agent-provider-launcher__panel {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  margin-bottom: 12px;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease,
+    visibility 180ms;
+}
+
+.agent-provider-launcher[data-open="false"] .agent-provider-launcher__panel {
+  opacity: 0;
+  transform: translateY(8px);
+  pointer-events: none;
+  visibility: hidden;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -309,7 +346,9 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .agent-provider-chat,
   .agent-provider-chat *,
+  .agent-provider-launcher,
   .agent-provider-launcher * {
     transition: none !important;
     scroll-behavior: auto !important;

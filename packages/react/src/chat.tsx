@@ -346,12 +346,15 @@ export function AgentProviderLauncher({
   const Button = chatProps.components?.Button ?? DefaultButton;
 
   return (
-    <div className="agent-provider-launcher">
-      {open ? (
-        <div className="agent-provider-launcher__panel">
-          <AgentProviderChat {...chatProps} />
-        </div>
-      ) : null}
+    <div className="agent-provider-launcher" data-open={open}>
+      {/* Keep the chat mounted while closed so the transcript survives
+          open/close and the panel can fade/slide via CSS (driven by
+          data-open on the wrapper) instead of mounting/unmounting
+          abruptly. Note this also means the chat's auto-connect probe
+          fires when the launcher mounts, not on first open. */}
+      <div className="agent-provider-launcher__panel">
+        <AgentProviderChat {...chatProps} />
+      </div>
       <Button
         type="button"
         className="agent-provider-launcher__button"
