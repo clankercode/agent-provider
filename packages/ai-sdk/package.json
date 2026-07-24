@@ -1,6 +1,6 @@
 {
   "name": "@agent-provider/ai-sdk",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "AI SDK LanguageModel fulfilled through the Agent Provider extension.",
   "license": "CC0-1.0 OR Unlicense",
   "repository": {
@@ -45,7 +45,7 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@agent-provider/protocol": "0.1.2",
+    "@agent-provider/protocol": "0.1.3",
     "@ai-sdk/provider": "^4.0.3"
   },
   "peerDependencies": {

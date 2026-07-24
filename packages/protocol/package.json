@@ -1,6 +1,6 @@
 {
   "name": "@agent-provider/protocol",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Versioned Agent Provider wire protocol and safe-value codec.",
   "license": "CC0-1.0 OR Unlicense",
   "repository": {
