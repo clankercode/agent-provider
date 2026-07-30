@@ -143,7 +143,9 @@ export function PopupApp() {
     setBusy(true);
     setError(undefined);
     try {
-      if (enabled && page.origin.startsWith("https://")) {
+      // Optional bridge origins are HTTPS anywhere, or HTTP on private/local
+      // hosts only. The browser prompt is required for any non-manifest origin.
+      if (enabled && !isAllowedApplicationOrigin(page.origin)) {
         const granted = await browser.permissions.request({
           origins: [`${page.origin}/*`],
         });
@@ -155,6 +157,41 @@ export function PopupApp() {
           type: "origin.set",
           ...page,
           enabled,
+        }),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function enableOriginAndAllowTab() {
+    if (page === undefined) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (!isAllowedApplicationOrigin(page.origin)) {
+        const granted = await browser.permissions.request({
+          origins: [`${page.origin}/*`],
+        });
+        if (!granted) throw new Error("Site access was not granted.");
+      }
+      // Enable bridge first (reloads the tab). Grant session after reload via
+      // a follow-up is hard; grant session before reload so the new page can
+      // use the session grant once the bridge is up.
+      await send({
+        marker: AGENT_PROVIDER_UI_MARKER,
+        type: "permission.set",
+        ...page,
+        decision: "grant-session",
+      });
+      setStatus(
+        await send({
+          marker: AGENT_PROVIDER_UI_MARKER,
+          type: "origin.set",
+          ...page,
+          enabled: true,
         }),
       );
     } catch (cause) {
@@ -261,12 +298,26 @@ export function PopupApp() {
           </section>
           <div className="actions">
             {!status.bridgeEnabled ? (
-              <button
-                disabled={busy}
-                onClick={() => void configureOrigin(true)}
-              >
-                Enable on this site
-              </button>
+              <div className="action-stack">
+                <button
+                  className="primary-lg"
+                  disabled={busy}
+                  onClick={() => void enableOriginAndAllowTab()}
+                >
+                  Enable site & allow this tab
+                </button>
+                <button
+                  className="secondary compact-action"
+                  disabled={busy}
+                  onClick={() => void configureOrigin(true)}
+                >
+                  Enable on this site only
+                </button>
+                <small className="muted action-hint">
+                  Enable injects the bridge for this exact origin, then reloads
+                  the tab. Allow lets the page use your model.
+                </small>
+              </div>
             ) : !granted ? (
               <>
                 <button
@@ -292,7 +343,7 @@ export function PopupApp() {
                 >
                   Revoke access
                 </button>
-                {status.origin.startsWith("https://") ? (
+                {!isAllowedApplicationOrigin(status.origin) ? (
                   <button
                     className="secondary"
                     disabled={busy}

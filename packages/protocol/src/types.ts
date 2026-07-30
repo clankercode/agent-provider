@@ -54,7 +54,12 @@ export interface BootstrapReject {
   type: "reject";
   direction: "extension-to-page";
   clientId: string;
-  code: "NO_VERSION_OVERLAP" | "INVALID_BOOTSTRAP";
+  code:
+    | "NO_VERSION_OVERLAP"
+    | "INVALID_BOOTSTRAP"
+    | "ORIGIN_NOT_ENABLED";
+  /** Optional human-readable guidance for ORIGIN_NOT_ENABLED and similar. */
+  message?: string;
 }
 
 export type BootstrapMessage =
@@ -162,6 +167,7 @@ export type PageToExtensionMessage =
 
 export type BridgeErrorCode =
   | "BRIDGE_UNAVAILABLE"
+  | "ORIGIN_NOT_ENABLED"
   | "VERSION_MISMATCH"
   | "PERMISSION_REQUIRED"
   | "PERMISSION_DENIED"

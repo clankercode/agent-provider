@@ -207,8 +207,11 @@ export class AgentProviderRuntime {
       this.patchState({
         connection:
           error instanceof AgentProviderBridgeError &&
-          error.code === "BRIDGE_UNAVAILABLE"
-            ? "unavailable"
+          (error.code === "BRIDGE_UNAVAILABLE" ||
+            error.code === "ORIGIN_NOT_ENABLED")
+            ? error.code === "ORIGIN_NOT_ENABLED"
+              ? "needs-enable"
+              : "unavailable"
             : "error",
         error: toErrorMessage(error),
       });

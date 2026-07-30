@@ -17,6 +17,10 @@ export default defineContentScript({
   matches: [...AGENT_PROVIDER_PAGE_MATCHES],
   runAt: "document_start",
   main() {
+    const origin = window.location.origin;
+    // Visible in the page DevTools console (content-script context).
+    console.debug("[agent-provider] content script active", { origin });
+
     const port = browser.runtime.connect({ name: AGENT_PROVIDER_PORT_NAME });
     const sessions = new Map<string, string>();
 
@@ -31,8 +35,19 @@ export default defineContentScript({
       if (!pageMessage) return;
 
       try {
+        if (
+          isBootstrapMessage(value) &&
+          value.type === "hello" &&
+          value.direction === "page-to-extension"
+        ) {
+          console.debug("[agent-provider] forward hello", {
+            clientId: value.clientId,
+            origin,
+          });
+        }
         port.postMessage(value);
-      } catch {
+      } catch (error) {
+        console.warn("[agent-provider] port post failed", error);
         // The page-side bridge times out safely while the worker restarts.
       }
     };
@@ -44,6 +59,19 @@ export default defineContentScript({
         if (value.direction !== "extension-to-page") return;
         if (value.type === "ready")
           sessions.set(value.clientId, value.sessionId);
+        if (value.type === "reject") {
+          console.info("[agent-provider] bootstrap reject", {
+            code: value.code,
+            clientId: value.clientId,
+            origin,
+          });
+        } else if (value.type === "ready") {
+          console.debug("[agent-provider] bootstrap ready", {
+            clientId: value.clientId,
+            sessionId: value.sessionId,
+            origin,
+          });
+        }
         window.postMessage(value as BootstrapMessage, pageTargetOrigin());
         return;
       }
@@ -53,6 +81,7 @@ export default defineContentScript({
     });
 
     port.onDisconnect.addListener(() => {
+      console.debug("[agent-provider] port disconnected", { origin });
       window.removeEventListener("message", pageListener);
       for (const [clientId, sessionId] of sessions) {
         const message = createBridgeEnvelope({

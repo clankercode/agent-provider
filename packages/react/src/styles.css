@@ -63,13 +63,63 @@
 }
 
 .agent-provider-status {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7.5rem, auto);
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
+  min-height: 3.5rem;
   padding: 12px 16px;
   border-bottom: 1px solid var(--agent-provider-border);
   background: color-mix(in srgb, var(--agent-provider-panel) 80%, transparent);
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+.agent-provider-status[data-tone="error"] {
+  background: color-mix(
+    in srgb,
+    var(--agent-provider-danger) 12%,
+    var(--agent-provider-panel)
+  );
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--agent-provider-danger) 35%,
+    var(--agent-provider-border)
+  );
+}
+
+.agent-provider-status[data-tone="warn"] {
+  background: color-mix(
+    in srgb,
+    var(--agent-provider-accent) 10%,
+    var(--agent-provider-panel)
+  );
+}
+
+.agent-provider-status__text {
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.agent-provider-status__action {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 34px;
+  min-width: 7.5rem;
+}
+
+.agent-provider-status__action .agent-provider-button {
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.agent-provider-status__action:empty {
+  /* Keep the column so the row doesn't reflow when the button unmounts. */
+  visibility: hidden;
 }
 
 .agent-provider-transcript {
@@ -264,18 +314,62 @@
 }
 
 .agent-provider-launcher {
+  --agent-provider-inset-top: 20px;
+  --agent-provider-inset-right: 20px;
+  --agent-provider-inset-bottom: 20px;
+  --agent-provider-inset-left: 20px;
   position: fixed;
-  right: 20px;
-  bottom: 20px;
   z-index: 2147482000;
   display: flex;
-  align-items: flex-end;
-  flex-direction: column;
   gap: 12px;
   transition:
     opacity 180ms ease,
     transform 180ms ease,
     visibility 180ms;
+  /* Default placement: bottom-right (also used when data-placement is omitted). */
+  right: var(--agent-provider-inset-right);
+  bottom: var(--agent-provider-inset-bottom);
+  align-items: flex-end;
+  flex-direction: column;
+}
+
+/* Corner placement is a first-class host choice via data-placement. The panel
+ * always opens away from the docked edges so it stays on-screen. */
+.agent-provider-launcher[data-placement="bottom-right"],
+.agent-provider-launcher:not([data-placement]) {
+  top: auto;
+  left: auto;
+  right: var(--agent-provider-inset-right);
+  bottom: var(--agent-provider-inset-bottom);
+  align-items: flex-end;
+  flex-direction: column;
+}
+
+.agent-provider-launcher[data-placement="bottom-left"] {
+  top: auto;
+  right: auto;
+  left: var(--agent-provider-inset-left);
+  bottom: var(--agent-provider-inset-bottom);
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.agent-provider-launcher[data-placement="top-right"] {
+  bottom: auto;
+  left: auto;
+  top: var(--agent-provider-inset-top);
+  right: var(--agent-provider-inset-right);
+  align-items: flex-end;
+  flex-direction: column-reverse;
+}
+
+.agent-provider-launcher[data-placement="top-left"] {
+  bottom: auto;
+  right: auto;
+  top: var(--agent-provider-inset-top);
+  left: var(--agent-provider-inset-left);
+  align-items: flex-start;
+  flex-direction: column-reverse;
 }
 
 /* Consumers that show/hide the whole launcher (e.g. while probing for the
@@ -297,17 +391,63 @@
 
 /* The panel stays mounted while closed (data-open on the launcher) and
  * fades/slides instead of appearing/disappearing abruptly. It is positioned
- * out of flow above the button so the hidden panel reserves no layout
+ * out of flow relative to the button so the hidden panel reserves no layout
  * space (visibility:hidden alone would leave a panel-sized gap). */
 .agent-provider-launcher__panel {
   position: absolute;
-  right: 0;
-  bottom: 100%;
-  margin-bottom: 12px;
   transition:
     opacity 180ms ease,
     transform 180ms ease,
     visibility 180ms;
+}
+
+/* Bottom placements: panel sits above the button. */
+.agent-provider-launcher[data-placement="bottom-right"]
+  .agent-provider-launcher__panel,
+.agent-provider-launcher[data-placement="bottom-left"]
+  .agent-provider-launcher__panel,
+.agent-provider-launcher:not([data-placement]) .agent-provider-launcher__panel {
+  bottom: 100%;
+  top: auto;
+  margin-bottom: 12px;
+  margin-top: 0;
+}
+
+.agent-provider-launcher[data-placement="bottom-right"]
+  .agent-provider-launcher__panel,
+.agent-provider-launcher:not([data-placement]) .agent-provider-launcher__panel {
+  right: 0;
+  left: auto;
+}
+
+.agent-provider-launcher[data-placement="bottom-left"]
+  .agent-provider-launcher__panel {
+  left: 0;
+  right: auto;
+}
+
+/* Top placements: panel sits below the button (column-reverse keeps the
+ * button visually on top while DOM order stays panel-then-button). */
+.agent-provider-launcher[data-placement="top-right"]
+  .agent-provider-launcher__panel,
+.agent-provider-launcher[data-placement="top-left"]
+  .agent-provider-launcher__panel {
+  top: 100%;
+  bottom: auto;
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.agent-provider-launcher[data-placement="top-right"]
+  .agent-provider-launcher__panel {
+  right: 0;
+  left: auto;
+}
+
+.agent-provider-launcher[data-placement="top-left"]
+  .agent-provider-launcher__panel {
+  left: 0;
+  right: auto;
 }
 
 .agent-provider-launcher[data-open="false"] .agent-provider-launcher__panel {
@@ -315,6 +455,15 @@
   transform: translateY(8px);
   pointer-events: none;
   visibility: hidden;
+}
+
+/* Top placements slide the other way when closed so motion still reads as
+ * "toward the button". */
+.agent-provider-launcher[data-placement="top-right"][data-open="false"]
+  .agent-provider-launcher__panel,
+.agent-provider-launcher[data-placement="top-left"][data-open="false"]
+  .agent-provider-launcher__panel {
+  transform: translateY(-8px);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -334,9 +483,19 @@
 
 @media (max-width: 540px) {
   .agent-provider-launcher {
-    right: 8px;
-    bottom: 8px;
-    left: 8px;
+    --agent-provider-inset-top: 8px;
+    --agent-provider-inset-right: 8px;
+    --agent-provider-inset-bottom: 8px;
+    --agent-provider-inset-left: 8px;
+  }
+
+  .agent-provider-launcher[data-placement="bottom-right"],
+  .agent-provider-launcher[data-placement="bottom-left"],
+  .agent-provider-launcher[data-placement="top-right"],
+  .agent-provider-launcher[data-placement="top-left"],
+  .agent-provider-launcher:not([data-placement]) {
+    left: var(--agent-provider-inset-left);
+    right: var(--agent-provider-inset-right);
   }
 
   .agent-provider-launcher__panel,

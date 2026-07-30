@@ -13,7 +13,10 @@ export default defineConfig({
       "https://generativelanguage.googleapis.com/*",
       "https://openrouter.ai/*",
     ],
-    optional_host_permissions: ["https://*/*"],
+    // HTTPS anywhere, plus HTTP only so private/local control planes (LAN IPs,
+    // localhost) can opt in via the popup. Public cleartext hosts are still
+    // rejected by optionalOriginPattern / isOptionalApplicationOrigin.
+    optional_host_permissions: ["https://*/*", "http://*/*"],
     action: {
       default_title: "Agent Provider",
     },

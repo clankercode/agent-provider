@@ -64,9 +64,14 @@ Components:
   panel. The panel stays mounted while closed and fades/slides via CSS
   (driven by `data-open` on the launcher wrapper), so the transcript
   survives open/close; this also means the chat's auto-connect probe fires
-  when the launcher mounts, not on first open. To show/hide the whole
-  launcher with the same fade (e.g. while probing for the extension), set
-  `data-visible="false"` on the `.agent-provider-launcher` element.
+  when the launcher mounts, not on first open. Placement is a first-class
+  host choice: pass `placement` (`bottom-right` default, also `bottom-left`,
+  `top-right`, `top-left`) and optional `insets` (`{ top, right, bottom, left }`
+  as px numbers or CSS lengths). These set `data-placement` and the
+  `--agent-provider-inset-*` custom properties, so a host stylesheet can
+  drive the same knobs without a prop. To show/hide the whole launcher with
+  the same fade (e.g. while probing for the extension), set `visible={false}`
+  or `data-visible="false"` on the `.agent-provider-launcher` element.
 
 Hooks (must be used inside `AgentProviderProvider`):
 

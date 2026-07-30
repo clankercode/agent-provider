@@ -90,9 +90,11 @@ implementation choice to weaken the stated outcome.
   session/deletion; and no provider credential or raw transport leakage.
 - **FR-22:** The built extension manifest must never use `<all_urls>` or broad
   required/active host access. Exact official provider origins may be required.
-  A browser may declare broad HTTPS _optional eligibility_ only when the user
-  must perform a browser-mediated gesture to activate one exact custom endpoint
-  origin, which remains inspectable and revocable. Tests distinguish required,
-  optionally eligible, and actively granted origins.
+  A browser may declare broad HTTPS _optional eligibility_ (and, for private/
+  local control planes only, optional HTTP eligibility) only when the user must
+  perform a browser-mediated gesture to activate one exact origin, which remains
+  inspectable and revocable. Public cleartext HTTP application origins must be
+  rejected in extension code. Tests distinguish required, optionally eligible,
+  and actively granted origins.
 - **FR-23:** The project must provide a runnable sample application containing
   read, write, destructive, named-context-region, and form-context examples.

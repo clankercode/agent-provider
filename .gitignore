@@ -10,3 +10,4 @@ coverage/
 /release/
 /_site/
 .env
+.priv.*

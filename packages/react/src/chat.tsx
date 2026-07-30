@@ -38,6 +38,46 @@ export interface AgentProviderChatProps {
   showToolActivity?: boolean;
 }
 
+/**
+ * Corner the floating launcher docks to. Driven by `data-placement` on the
+ * launcher root so host apps can choose a corner without forking CSS; fine
+ * offsets use the `--agent-provider-inset-*` custom properties.
+ */
+export type AgentProviderLauncherPlacement =
+  | "bottom-right"
+  | "bottom-left"
+  | "top-right"
+  | "top-left";
+
+export interface AgentProviderLauncherInsets {
+  top?: number | string;
+  right?: number | string;
+  bottom?: number | string;
+  left?: number | string;
+}
+
+function formatInset(value: number | string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  return typeof value === "number" ? `${value}px` : value;
+}
+
+/** Style object for host-supplied launcher insets (CSS custom properties). */
+export function launcherInsetStyle(
+  insets: AgentProviderLauncherInsets | undefined,
+): { [key: `--${string}`]: string } | undefined {
+  if (insets === undefined) return undefined;
+  const style: { [key: `--${string}`]: string } = {};
+  const top = formatInset(insets.top);
+  const right = formatInset(insets.right);
+  const bottom = formatInset(insets.bottom);
+  const left = formatInset(insets.left);
+  if (top !== undefined) style["--agent-provider-inset-top"] = top;
+  if (right !== undefined) style["--agent-provider-inset-right"] = right;
+  if (bottom !== undefined) style["--agent-provider-inset-bottom"] = bottom;
+  if (left !== undefined) style["--agent-provider-inset-left"] = left;
+  return Object.keys(style).length > 0 ? style : undefined;
+}
+
 const DefaultButton: ComponentType<ButtonHTMLAttributes<HTMLButtonElement>> = (
   props,
 ) => <button {...props} />;
@@ -169,13 +209,32 @@ export function AgentProviderChat({
   const statusText = useMemo(() => {
     if (state.connection === "connecting") return "Looking for the extension…";
     if (state.connection === "unavailable")
-      return "AgentProvider extension not detected.";
+      return "Agent Provider extension not detected. Install it, then open the popup on this tab and choose Enable on this site. Reload the page after enabling.";
+    if (state.connection === "needs-enable")
+      return (
+        state.error ??
+        "Agent Provider is installed, but this origin is not enabled. Open the extension popup → Enable on this site, then reload."
+      );
     if (state.connection === "error") return state.error ?? "Bridge error.";
     if (!providerConfigured)
-      return "Configure a provider in the AgentProvider extension.";
-    if (!granted) return "This page needs permission to use your model.";
+      return "Configure a provider in the Agent Provider extension (options page).";
+    if (!granted)
+      return "Please allow this page in the Agent Provider extension (Allow this tab or Always allow).";
     return undefined;
   }, [granted, providerConfigured, state.connection, state.error]);
+
+  const showConnectAction =
+    state.connection !== "connecting" &&
+    (state.connection === "unavailable" ||
+      state.connection === "needs-enable" ||
+      state.connection === "error" ||
+      (state.connection === "ready" && !granted));
+
+  const connectButtonLabel = authorizing
+    ? "Connecting…"
+    : state.connection === "ready" && !granted
+      ? "Request access"
+      : connectLabel;
 
   async function connectAndAuthorize() {
     setAuthorizing(true);
@@ -229,19 +288,32 @@ export function AgentProviderChat({
       </header>
 
       {statusText !== undefined ? (
-        <div className="agent-provider-status" role="status">
-          <span>{statusText}</span>
-          {state.connection !== "connecting" &&
-          (!granted || state.connection !== "ready") ? (
-            <Button
-              type="button"
-              className="agent-provider-button"
-              disabled={authorizing}
-              onClick={() => void connectAndAuthorize()}
-            >
-              {authorizing ? "Connecting…" : connectLabel}
-            </Button>
-          ) : null}
+        <div
+          className="agent-provider-status"
+          role="status"
+          data-tone={
+            state.connection === "unavailable" ||
+            state.connection === "needs-enable" ||
+            state.connection === "error"
+              ? "error"
+              : state.connection === "ready" && !granted
+                ? "warn"
+                : "info"
+          }
+        >
+          <span className="agent-provider-status__text">{statusText}</span>
+          <div className="agent-provider-status__action">
+            {showConnectAction ? (
+              <Button
+                type="button"
+                className="agent-provider-button"
+                disabled={authorizing}
+                onClick={() => void connectAndAuthorize()}
+              >
+                {connectButtonLabel}
+              </Button>
+            ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -335,18 +407,45 @@ export function AgentProviderChat({
 export interface AgentProviderLauncherProps extends AgentProviderChatProps {
   buttonLabel?: string;
   defaultOpen?: boolean;
+  /**
+   * Which viewport corner the floating launcher occupies. Default
+   * `bottom-right`. The panel opens away from the chosen edges.
+   */
+  placement?: AgentProviderLauncherPlacement;
+  /**
+   * Optional edge offsets. Numbers are pixels; strings pass through as CSS
+   * (e.g. `"4.5rem"`). Applied as `--agent-provider-inset-*` variables so
+   * hosts can also set them from a stylesheet without a prop.
+   */
+  insets?: AgentProviderLauncherInsets;
+  /** When false, the launcher fades out via `data-visible` (probe gating). */
+  visible?: boolean;
+  className?: string;
 }
 
 export function AgentProviderLauncher({
   buttonLabel = "Ask AgentProvider",
   defaultOpen = false,
+  placement = "bottom-right",
+  insets,
+  visible = true,
+  className = "",
   ...chatProps
 }: AgentProviderLauncherProps) {
   const [open, setOpen] = useState(defaultOpen);
   const Button = chatProps.components?.Button ?? DefaultButton;
+  const insetStyle = launcherInsetStyle(insets);
 
   return (
-    <div className="agent-provider-launcher" data-open={open}>
+    <div
+      className={["agent-provider-launcher", className]
+        .filter(Boolean)
+        .join(" ")}
+      data-open={open}
+      data-placement={placement}
+      data-visible={visible}
+      style={insetStyle}
+    >
       {/* Keep the chat mounted while closed so the transcript survives
           open/close and the panel can fade/slide via CSS (driven by
           data-open on the wrapper) instead of mounting/unmounting

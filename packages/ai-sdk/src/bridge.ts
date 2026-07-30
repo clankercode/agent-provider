@@ -376,11 +376,22 @@ export class AgentProviderBridge {
       clearTimeout(pending.timer);
       this.pendingBootstrap = undefined;
       if (message.type === "reject") {
+        const code =
+          message.code === "ORIGIN_NOT_ENABLED"
+            ? "ORIGIN_NOT_ENABLED"
+            : "VERSION_MISMATCH";
+        const defaultMessage =
+          message.code === "ORIGIN_NOT_ENABLED"
+            ? "This origin is not enabled in the Agent Provider extension. Open the popup and choose Enable on this site, then reload."
+            : "The page and extension have no compatible protocol version.";
         pending.reject(
           new AgentProviderBridgeError({
-            code: "VERSION_MISMATCH",
+            code,
             message:
-              "The page and extension have no compatible protocol version.",
+              typeof message.message === "string" && message.message.length > 0
+                ? message.message
+                : defaultMessage,
+            retryable: message.code === "ORIGIN_NOT_ENABLED",
           }),
         );
       } else {

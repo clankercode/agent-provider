@@ -25,6 +25,11 @@ import {
 import type { LanguageModelV4Usage } from "@ai-sdk/provider";
 import { isAllowedApplicationOrigin } from "../agent-provider.config.js";
 import {
+  contentScriptMatchPattern,
+  contentScriptRegistrationId,
+  optionalOriginPattern,
+} from "../lib/application-origin.js";
+import {
   AuditRecorder,
   IndexedDbPersistentAuditStore,
   type AuditEvent,
@@ -91,11 +96,44 @@ const sessionExecution = new Map<
 >();
 const connectedTabOrigins = new Map<string, number>();
 const AUTHORITY_FINGERPRINTS_KEY = "agent-provider.authority-fingerprints.v1";
+/** Exact origins the user has enabled for optional site bridges. */
+const ENABLED_ORIGINS_KEY = "agent-provider.enabled-origins.v1";
 const quotaManager = new PersistentQuotaManager();
 const auditRecorder = new AuditRecorder(new IndexedDbPersistentAuditStore());
 const approvalStore = new IndexedDbApprovalStore();
 let persistentAuditError = false;
 let quotaRecovery: Promise<void> | undefined;
+
+function bridgeLog(level: "debug" | "info" | "warn" | "error", message: string, detail?: unknown): void {
+  const prefix = `[agent-provider] ${message}`;
+  if (detail === undefined) {
+    console[level](prefix);
+    return;
+  }
+  console[level](prefix, detail);
+}
+
+async function loadEnabledOrigins(): Promise<Set<string>> {
+  const stored = await browser.storage.local.get(ENABLED_ORIGINS_KEY);
+  const value = stored[ENABLED_ORIGINS_KEY];
+  if (!Array.isArray(value)) return new Set();
+  return new Set(
+    value.filter((item): item is string => typeof item === "string" && item.length > 0),
+  );
+}
+
+async function saveEnabledOrigins(origins: Set<string>): Promise<void> {
+  await browser.storage.local.set({
+    [ENABLED_ORIGINS_KEY]: [...origins].sort(),
+  });
+}
+
+async function markOriginEnabled(origin: string, enabled: boolean): Promise<void> {
+  const origins = await loadEnabledOrigins();
+  if (enabled) origins.add(origin);
+  else origins.delete(origin);
+  await saveEnabledOrigins(origins);
+}
 
 interface PendingPermission {
   complete(decision: PermissionDecision): Promise<void>;
@@ -125,26 +163,141 @@ function sessionKey(tabId: number, origin: string): string {
   return `${tabId}:${origin}`;
 }
 
-function optionalOriginPattern(origin: string): string {
-  const url = new URL(origin);
-  if (url.protocol !== "https:" || url.origin !== origin) {
-    throw new Error("Only exact HTTPS application origins can be enabled.");
-  }
-  return `${origin}/*`;
-}
-
 async function dynamicContentScriptId(origin: string): Promise<string> {
-  return `agent-provider-${(await fingerprintCanonicalJson(origin)).slice(0, 24)}`;
+  return contentScriptRegistrationId(origin);
 }
 
 async function originBridgeEnabled(origin: string): Promise<boolean> {
   if (isAllowedApplicationOrigin(origin)) return true;
+  if (!isOptionalApplicationOriginSafe(origin)) return false;
+  const enabled = await loadEnabledOrigins();
+  if (enabled.has(origin)) return true;
+  // Backward-compat: older builds only stored the browser host permission.
   try {
-    return await browser.permissions.contains({
+    const permitted = await browser.permissions.contains({
       origins: [optionalOriginPattern(origin)],
     });
+    if (permitted) {
+      await markOriginEnabled(origin, true);
+      return true;
+    }
+  } catch {
+    // permissions API unavailable or pattern rejected.
+  }
+  return false;
+}
+
+function isOptionalApplicationOriginSafe(origin: string): boolean {
+  try {
+    // Re-use optionalOriginPattern validation path.
+    optionalOriginPattern(origin);
+    return true;
   } catch {
     return false;
+  }
+}
+
+async function ensureContentScriptForOrigin(origin: string): Promise<void> {
+  if (isAllowedApplicationOrigin(origin)) return;
+  if (!isOptionalApplicationOriginSafe(origin)) {
+    throw new Error(`Origin is not eligible for an optional bridge: ${origin}`);
+  }
+  const permissionPattern = optionalOriginPattern(origin);
+  const scriptMatch = contentScriptMatchPattern(origin);
+  const id = await dynamicContentScriptId(origin);
+  const granted = await browser.permissions.contains({
+    origins: [permissionPattern],
+  });
+  if (!granted) {
+    bridgeLog("warn", "ensureContentScript missing host permission", {
+      origin,
+      permissionPattern,
+    });
+    throw new Error("Site access was not granted.");
+  }
+  const existing = await browser.scripting.getRegisteredContentScripts({
+    ids: [id],
+  });
+  if (existing.length === 0) {
+    await browser.scripting.registerContentScripts([
+      {
+        id,
+        matches: [scriptMatch],
+        js: ["content-scripts/content.js"],
+        runAt: "document_start",
+        persistAcrossSessions: true,
+      },
+    ]);
+    bridgeLog("info", "registered content script", { id, scriptMatch, origin });
+  } else {
+    const currentMatches = existing[0]?.matches ?? [];
+    if (!currentMatches.includes(scriptMatch)) {
+      // updateContentScripts typing requires css|js; re-register is simpler.
+      await browser.scripting.unregisterContentScripts({ ids: [id] });
+      await browser.scripting.registerContentScripts([
+        {
+          id,
+          matches: [scriptMatch],
+          js: ["content-scripts/content.js"],
+          runAt: "document_start",
+          persistAcrossSessions: true,
+        },
+      ]);
+      bridgeLog("info", "replaced content script matches", {
+        id,
+        from: currentMatches,
+        to: scriptMatch,
+        origin,
+      });
+    } else {
+      bridgeLog("debug", "content script already registered", {
+        id,
+        matches: currentMatches,
+        origin,
+      });
+    }
+  }
+  await markOriginEnabled(origin, true);
+}
+
+/**
+ * Dynamic content scripts do not always survive extension reloads. Re-register
+ * every enabled optional origin on worker start, and migrate older permission
+ * grants that predate the enabled-origins list.
+ */
+async function rehydrateOptionalBridges(): Promise<void> {
+  const enabled = await loadEnabledOrigins();
+  const origins = new Set(enabled);
+
+  // Migrate: any optional host permission that looks like an exact origin grant.
+  try {
+    const all = await browser.permissions.getAll();
+    for (const pattern of all.origins ?? []) {
+      // Patterns look like "http://host:port/*" or "https://host/*".
+      if (!pattern.endsWith("/*")) continue;
+      const origin = pattern.slice(0, -2);
+      if (!isOptionalApplicationOriginSafe(origin)) continue;
+      if (isAllowedApplicationOrigin(origin)) continue;
+      origins.add(origin);
+    }
+  } catch {
+    // getAll may be unavailable on some platforms.
+  }
+
+  bridgeLog("info", "rehydrateOptionalBridges", {
+    count: origins.size,
+    origins: [...origins],
+  });
+
+  for (const origin of origins) {
+    try {
+      await ensureContentScriptForOrigin(origin);
+    } catch (cause) {
+      bridgeLog("warn", "rehydrate origin failed", {
+        origin,
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+    }
   }
 }
 
@@ -154,24 +307,23 @@ async function setOriginBridge(
   enabled: boolean,
 ): Promise<boolean> {
   if (isAllowedApplicationOrigin(origin)) return true;
-  const pattern = optionalOriginPattern(origin);
+  const permissionPattern = optionalOriginPattern(origin);
+  // Content-script matches are host-based (no port). Exact origin is enforced
+  // again in onConnect / bootstrap via originBridgeEnabled + enabled-origins.
+  const scriptMatch = contentScriptMatchPattern(origin);
   const id = await dynamicContentScriptId(origin);
+  bridgeLog("info", "setOriginBridge", {
+    origin,
+    enabled,
+    permissionPattern,
+    scriptMatch,
+    id,
+  });
   if (enabled) {
-    const granted = await browser.permissions.contains({ origins: [pattern] });
-    if (!granted) return false;
-    const existing = await browser.scripting.getRegisteredContentScripts({
-      ids: [id],
-    });
-    if (existing.length === 0) {
-      await browser.scripting.registerContentScripts([
-        {
-          id,
-          matches: [pattern],
-          js: ["content-scripts/content.js"],
-          runAt: "document_start",
-          persistAcrossSessions: true,
-        },
-      ]);
+    try {
+      await ensureContentScriptForOrigin(origin);
+    } catch {
+      return false;
     }
   } else {
     try {
@@ -179,7 +331,12 @@ async function setOriginBridge(
     } catch {
       // Registration may already have been removed by the browser or user.
     }
-    await browser.permissions.remove({ origins: [pattern] });
+    try {
+      await browser.permissions.remove({ origins: [permissionPattern] });
+    } catch {
+      // Permission may already be absent.
+    }
+    await markOriginEnabled(origin, false);
     sessionGrants.delete(sessionKey(tabId, origin));
     sessionAliasFingerprints.delete(sessionKey(tabId, origin));
     await revokePersistentPermission(origin);
@@ -679,6 +836,21 @@ export default defineBackground(() => {
   void ensureQuotaRecovery().catch(() => {
     // Requests await the same recovery and surface a safe bridge error.
   });
+  // Dynamic content scripts are not guaranteed across extension reloads.
+  // Re-register every enabled optional origin as soon as the worker starts.
+  void rehydrateOptionalBridges().catch((cause) => {
+    bridgeLog("error", "rehydrateOptionalBridges failed", {
+      error: cause instanceof Error ? cause.message : String(cause),
+    });
+  });
+  browser.runtime.onInstalled.addListener(() => {
+    void rehydrateOptionalBridges().catch(() => {});
+  });
+  if (browser.runtime.onStartup) {
+    browser.runtime.onStartup.addListener(() => {
+      void rehydrateOptionalBridges().catch(() => {});
+    });
+  }
 
   browser.runtime.onConnect.addListener((port) => {
     if (port.name !== AGENT_PROVIDER_PORT_NAME) return;
@@ -686,22 +858,30 @@ export default defineBackground(() => {
     const tabId = port.sender?.tab?.id;
     const origin = parseHttpOrigin(port.sender?.url ?? port.sender?.tab?.url);
     if (tabId === undefined || origin === undefined) {
+      bridgeLog("warn", "onConnect rejected: missing tab/origin", {
+        tabId,
+        url: port.sender?.url ?? port.sender?.tab?.url,
+      });
       port.disconnect();
       return;
     }
+    bridgeLog("debug", "onConnect", { tabId, origin });
     const connectedKey = sessionKey(tabId, origin);
     let disconnected = false;
     const trustedOrigin = originBridgeEnabled(origin);
     void trustedOrigin.then((trusted) => {
       if (disconnected) return;
       if (!trusted) {
-        port.disconnect();
+        bridgeLog("info", "onConnect origin not enabled", { tabId, origin });
+        // Keep the port briefly so a concurrent hello can receive ORIGIN_NOT_ENABLED.
+        // Content script may still forward; bootstrap handler posts reject.
         return;
       }
       connectedTabOrigins.set(
         connectedKey,
         (connectedTabOrigins.get(connectedKey) ?? 0) + 1,
       );
+      bridgeLog("info", "onConnect trusted", { tabId, origin });
     });
     let activeCount = 0;
     const sessions = new Map<string, string>();
@@ -1259,7 +1439,24 @@ export default defineBackground(() => {
         if (value.type !== "hello" || value.direction !== "page-to-extension")
           return;
         void trustedOrigin.then((trusted) => {
-          if (!trusted) return;
+          if (!trusted) {
+            bridgeLog("info", "bootstrap reject ORIGIN_NOT_ENABLED", {
+              tabId,
+              origin,
+              clientId: value.clientId,
+            });
+            post({
+              channel: "agent-provider.bridge",
+              bootstrap: 0,
+              type: "reject",
+              direction: "extension-to-page",
+              clientId: value.clientId,
+              code: "ORIGIN_NOT_ENABLED",
+              message:
+                "This origin is not enabled in Agent Provider. Open the extension popup → Enable on this site, then reload the page.",
+            });
+            return;
+          }
           const selectedVersion = negotiateProtocolVersion(value);
           if (selectedVersion === undefined) {
             post({
@@ -1288,6 +1485,12 @@ export default defineBackground(() => {
           }
           const sessionId = `session-${crypto.randomUUID()}`;
           sessions.set(value.clientId, sessionId);
+          bridgeLog("info", "bootstrap ready", {
+            tabId,
+            origin,
+            clientId: value.clientId,
+            sessionId,
+          });
           void capabilitiesFor(tabId, origin).then((capabilities) => {
             post(
               createBootstrapReady({

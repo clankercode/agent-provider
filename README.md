@@ -41,6 +41,10 @@ Provider credentials are configured in the extension, never in page code.
 Expected provider, policy, permission, cancellation, and bridge failures are
 returned as structured outcomes.
 
+**Integrators:** start with
+[docs/INTEGRATING.md](docs/INTEGRATING.md) (connection states, origin enable,
+launcher placement, Chrome match-pattern pitfalls, debugging).
+
 The current implementation enforces exact-origin consent, alias authority
 fingerprints, durable per-origin quotas, audit-first/private execution,
 single-use extension approval, provider destination checks, result scrubbing,

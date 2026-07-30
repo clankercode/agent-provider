@@ -53,7 +53,10 @@ export function isBootstrapMessage(value: unknown): value is BootstrapMessage {
   return (
     value.type === "reject" &&
     value.direction === "extension-to-page" &&
-    (value.code === "NO_VERSION_OVERLAP" || value.code === "INVALID_BOOTSTRAP")
+    (value.code === "NO_VERSION_OVERLAP" ||
+      value.code === "INVALID_BOOTSTRAP" ||
+      value.code === "ORIGIN_NOT_ENABLED") &&
+    (value.message === undefined || typeof value.message === "string")
   );
 }
 

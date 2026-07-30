@@ -49,6 +49,34 @@ git push origin master v0.2.0     # the tag push is what publishes
 
 Watch the run in the repo's **Actions** tab.
 
+## Browser store upload (manual)
+
+CI attaches store zips to the GitHub Release, but **Chrome Web Store and AMO
+submission are still manual publisher steps**. Local packaging (same artifacts
+CI builds):
+
+```bash
+npm run package:stores   # or: just package-stores
+xdg-open release         # Chrome ZIP, Firefox ZIP, source ZIP, SHA256SUMS
+```
+
+Then:
+
+1. **Chrome Web Store** — upload `release/agent-provider-X.Y.Z-chrome.zip` on
+   the extension's Package page in the developer dashboard.
+   - The dashboard URL (includes publisher + item IDs) is **not public**. Keep
+     it in a local gitignored file: `.priv.cws-link.txt` (pattern `.priv.*` is
+     ignored). Open it with `xdg-open "$(grep -oE 'https://[^ ]+' .priv.cws-link.txt | head -1)"`.
+   - There is no in-repo automation for CWS upload (OAuth + dashboard flow);
+     use the dashboard or a publisher-owned tool if you add one later.
+2. **Firefox AMO** — upload `release/agent-provider-X.Y.Z-firefox.zip` and the
+   full source zip `release/agent-provider-X.Y.Z-source.zip` (reviewers need
+   source). See `store/FIREFOX-REVIEW-NOTES.md`.
+3. Complete listing / privacy / permission declarations from `store/`
+   (`LISTING.md`, `PRIVACY.md`, `PERMISSIONS.md`) — checklist in
+   [`store/README.md`](store/README.md).
+4. Keep `release/SHA256SUMS` with the release record.
+
 ## One-time setup: npm trusted publishers
 
 Trusted publishing must be configured once **per package** so the registry

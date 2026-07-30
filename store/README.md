@@ -24,7 +24,9 @@ Before submission, the publisher must:
 2. confirm support URL, publisher identity, category, and listing screenshots;
 3. complete Chrome Web Store and AMO data-use declarations from
    `PRIVACY.md` and `PERMISSIONS.md`;
-4. upload the Chrome ZIP to Chrome Web Store;
+4. upload the Chrome ZIP to Chrome Web Store (Package page). The dashboard URL
+   is private — keep it in repo-root `.priv.cws-link.txt` (gitignored via
+   `.priv.*`). See also the store-upload section in [`RELEASE.md`](../RELEASE.md);
 5. upload the Firefox ZIP and full source ZIP to AMO; and
 6. retain `SHA256SUMS` with the release record.
 

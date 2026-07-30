@@ -7,7 +7,10 @@ highest-priority ready item that is not blocked.
 
 ## In progress
 
-No ready work is currently in progress.
+- **P0 — Private/local HTTP site bridges + launcher placement + presence UX:**
+  host-based content-script registration with exact-origin recheck (fixes LAN
+  ports); presence vs grant messaging; stable status row; popup combined
+  enable+allow; integrator docs (`docs/INTEGRATING.md`).
 
 ## Completed on 2026-07-23
 
