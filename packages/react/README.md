@@ -73,7 +73,7 @@ Components:
   the same fade (e.g. while probing for the extension), set `visible={false}`
   or `data-visible="false"` on the `.agent-provider-launcher` element.
 
-**New in NEXT_VERSION** — `toolResultRenderer` prop on `AgentProviderChat` and
+**New in 0.1.5** — `toolResultRenderer` prop on `AgentProviderChat` and
 `AgentProviderLauncher`. When provided, the expanded tool-call Result section
 shows a `[rendered|pretty|raw]` button group that fades in. "rendered" calls
 the host function with the full `ToolActivity` and displays its React output.

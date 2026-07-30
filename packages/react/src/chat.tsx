@@ -35,7 +35,7 @@ export interface AgentProviderChatComponents {
  * arbitrary React content. When provided, a "rendered" view-mode button
  * appears alongside raw/pretty in the expanded Result section.
  *
- * New in NEXT_VERSION.
+ * New in 0.1.5.
  */
 export type ToolResultRenderer = (activity: ToolActivity) => ReactNode;
 
@@ -79,7 +79,7 @@ export interface AgentProviderChatProps {
    * calls this function with the full ToolActivity and displays whatever
    * React content it returns.
    *
-   * New in NEXT_VERSION.
+   * New in 0.1.5.
    */
   toolResultRenderer?: ToolResultRenderer;
 }
