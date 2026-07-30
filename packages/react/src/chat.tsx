@@ -7,6 +7,7 @@ import {
   type ComponentType,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
   type TextareaHTMLAttributes,
 } from "react";
 import type {
@@ -27,6 +28,18 @@ export interface AgentProviderChatComponents {
   }>;
   Activity?: ComponentType<{ activity: ToolActivity }>;
 }
+
+/**
+ * A host-provided renderer for tool-call results. Receives the full
+ * ToolActivity (including output, toolName, toolCallId) and returns
+ * arbitrary React content. When provided, a "rendered" view-mode button
+ * appears alongside raw/pretty in the expanded Result section.
+ *
+ * New in NEXT_VERSION.
+ */
+export type ToolResultRenderer = (activity: ToolActivity) => ReactNode;
+
+export type ToolResultViewMode = "raw" | "pretty" | "rendered";
 
 export interface AgentProviderChatProps {
   className?: string;
@@ -60,6 +73,15 @@ export interface AgentProviderChatProps {
    * New in 0.1.4.
    */
   markdown?: boolean;
+  /**
+   * Host-provided renderer for tool-call results. When set, the expanded
+   * Result section shows a [raw|pretty|rendered] button group. "rendered"
+   * calls this function with the full ToolActivity and displays whatever
+   * React content it returns.
+   *
+   * New in NEXT_VERSION.
+   */
+  toolResultRenderer?: ToolResultRenderer;
 }
 
 /**
@@ -279,6 +301,16 @@ function displayJson(value: unknown): string {
   }
 }
 
+function displayJsonRaw(value: unknown): string {
+  try {
+    return JSON.stringify(value, (_key, item) =>
+      typeof item === "bigint" ? `${item}n` : item,
+    );
+  } catch {
+    return "[Unrenderable tool input]";
+  }
+}
+
 function DefaultApproval({
   request,
   approve,
@@ -319,8 +351,17 @@ function DefaultApproval({
   );
 }
 
-function DefaultActivity({ activity }: { activity: ToolActivity }) {
+function DefaultActivity({
+  activity,
+  resultRenderer,
+}: {
+  activity: ToolActivity;
+  resultRenderer?: ToolResultRenderer;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [resultMode, setResultMode] = useState<ToolResultViewMode>(
+    resultRenderer ? "rendered" : "pretty",
+  );
 
   const phaseLabel: Record<ToolActivity["phase"], string> = {
     "awaiting-approval": "awaiting approval",
@@ -332,6 +373,8 @@ function DefaultActivity({ activity }: { activity: ToolActivity }) {
   const summary =
     activity.error ??
     (activity.output ? "result" : activity.input ? "args" : "");
+
+  const hasResult = activity.output !== undefined;
 
   return (
     <div
@@ -362,10 +405,99 @@ function DefaultActivity({ activity }: { activity: ToolActivity }) {
               <pre>{displayJson(activity.input)}</pre>
             </details>
           ) : null}
-          {activity.output !== undefined ? (
-            <details className="agent-provider-tool__section">
-              <summary>Result</summary>
-              <pre>{displayJson(activity.output)}</pre>
+          {hasResult ? (
+            <details className="agent-provider-tool__section" open>
+              <summary className="agent-provider-tool__result-summary">
+                <span>Result</span>
+                {resultRenderer ? (
+                  <div className="agent-provider-tool__view-toggle">
+                    <button
+                      type="button"
+                      className={
+                        resultMode === "rendered"
+                          ? "agent-provider-tool__view-btn agent-provider-tool__view-btn--active"
+                          : "agent-provider-tool__view-btn"
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setResultMode("rendered");
+                      }}
+                    >
+                      rendered
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        resultMode === "pretty"
+                          ? "agent-provider-tool__view-btn agent-provider-tool__view-btn--active"
+                          : "agent-provider-tool__view-btn"
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setResultMode("pretty");
+                      }}
+                    >
+                      pretty
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        resultMode === "raw"
+                          ? "agent-provider-tool__view-btn agent-provider-tool__view-btn--active"
+                          : "agent-provider-tool__view-btn"
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setResultMode("raw");
+                      }}
+                    >
+                      raw
+                    </button>
+                  </div>
+                ) : (
+                  <div className="agent-provider-tool__view-toggle">
+                    <button
+                      type="button"
+                      className={
+                        resultMode === "pretty"
+                          ? "agent-provider-tool__view-btn agent-provider-tool__view-btn--active"
+                          : "agent-provider-tool__view-btn"
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setResultMode("pretty");
+                      }}
+                    >
+                      pretty
+                    </button>
+                    <button
+                      type="button"
+                      className={
+                        resultMode === "raw"
+                          ? "agent-provider-tool__view-btn agent-provider-tool__view-btn--active"
+                          : "agent-provider-tool__view-btn"
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setResultMode("raw");
+                      }}
+                    >
+                      raw
+                    </button>
+                  </div>
+                )}
+              </summary>
+              {resultMode === "rendered" && resultRenderer ? (
+                <div className="agent-provider-tool__rendered">
+                  {resultRenderer(activity)}
+                </div>
+              ) : resultMode === "raw" ? (
+                <pre className="agent-provider-tool__raw">
+                  {displayJsonRaw(activity.output)}
+                </pre>
+              ) : (
+                <pre>{displayJson(activity.output)}</pre>
+              )}
             </details>
           ) : null}
           {activity.error !== undefined ? (
@@ -399,6 +531,7 @@ export function AgentProviderChat({
   headerLabel,
   thinkingColor,
   markdown = true,
+  toolResultRenderer,
 }: AgentProviderChatProps) {
   const runtime = useAgentProviderRuntime();
   const state = useAgentProviderState();
@@ -408,7 +541,7 @@ export function AgentProviderChat({
 
   const Button = components.Button ?? DefaultButton;
   const Textarea = components.Textarea ?? DefaultTextarea;
-  const Activity = components.Activity ?? DefaultActivity;
+  const CustomActivity = components.Activity;
   const Message = components.Message;
 
   const granted = isPermissionGranted(state.capabilities?.permission);
@@ -594,9 +727,19 @@ export function AgentProviderChat({
         {showToolActivity
           ? state.toolActivity
               .slice(-8)
-              .map((activity) => (
-                <Activity key={activity.id} activity={activity} />
-              ))
+              .map((activity) =>
+                CustomActivity ? (
+                  <CustomActivity key={activity.id} activity={activity} />
+                ) : (
+                  <DefaultActivity
+                    key={activity.id}
+                    activity={activity}
+                    {...(toolResultRenderer
+                      ? { resultRenderer: toolResultRenderer }
+                      : {})}
+                  />
+                ),
+              )
           : null}
 
         {state.approvals.map((request) => {

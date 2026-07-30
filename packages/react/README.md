@@ -73,6 +73,25 @@ Components:
   the same fade (e.g. while probing for the extension), set `visible={false}`
   or `data-visible="false"` on the `.agent-provider-launcher` element.
 
+**New in NEXT_VERSION** — `toolResultRenderer` prop on `AgentProviderChat` and
+`AgentProviderLauncher`. When provided, the expanded tool-call Result section
+shows a `[rendered|pretty|raw]` button group that fades in. "rendered" calls
+the host function with the full `ToolActivity` and displays its React output.
+Without a renderer, the toggle shows `[pretty|raw]`.
+
+```tsx
+import type { ToolResultRenderer } from "@agent-provider/react";
+
+const renderResult: ToolResultRenderer = (activity) => {
+  if (activity.toolName === "get_weather") {
+    return <WeatherCard data={activity.output} />;
+  }
+  return <pre>{JSON.stringify(activity.output, null, 2)}</pre>;
+};
+
+<AgentProviderChat toolResultRenderer={renderResult} />;
+```
+
 **New in 0.1.4** — additional props on `AgentProviderChat` and
 `AgentProviderLauncher`:
 
