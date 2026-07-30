@@ -28,13 +28,10 @@ const profilesRoot =
   process.env.AP_PLAYWRIGHT_PROFILES ??
   join(homedir(), ".cache/agent-provider/playwright-profiles");
 const profilePath = join(profilesRoot, profileName);
-const startUrl =
-  process.env.START_URL ?? "http://10.42.0.8:15066/";
+const startUrl = process.env.START_URL ?? "http://10.42.0.8:15066/";
 const headless = process.env.HEADLESS === "1";
 const executablePath =
-  process.env.CHROMIUM_PATH ??
-  process.env.CHROME_PATH ??
-  "/usr/bin/chromium";
+  process.env.CHROMIUM_PATH ?? process.env.CHROME_PATH ?? "/usr/bin/chromium";
 const cdpPort = Number(process.env.CDP_PORT ?? "9333");
 
 await access(join(extensionPath, "manifest.json"));
@@ -109,18 +106,22 @@ page.on("console", (message) => {
   }
 });
 
-await page.goto(startUrl, { waitUntil: "domcontentloaded", timeout: 30_000 }).catch((error) => {
-  console.warn(`[ap-browser] start url failed: ${error.message}`);
-});
+await page
+  .goto(startUrl, { waitUntil: "domcontentloaded", timeout: 30_000 })
+  .catch((error) => {
+    console.warn(`[ap-browser] start url failed: ${error.message}`);
+  });
 
 if (extensionOrigin !== undefined) {
   const options = await context.newPage();
-  await options.goto(`${extensionOrigin}/options.html`, {
-    waitUntil: "domcontentloaded",
-    timeout: 15_000,
-  }).catch((error) => {
-    console.warn(`[ap-browser] options open failed: ${error.message}`);
-  });
+  await options
+    .goto(`${extensionOrigin}/options.html`, {
+      waitUntil: "domcontentloaded",
+      timeout: 15_000,
+    })
+    .catch((error) => {
+      console.warn(`[ap-browser] options open failed: ${error.message}`);
+    });
   console.log(`[ap-browser] opened options: ${extensionOrigin}/options.html`);
 }
 

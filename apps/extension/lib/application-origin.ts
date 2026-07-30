@@ -38,7 +38,7 @@ export function isPrivateOrLocalHostname(hostname: string): boolean {
     const [a, b] = octets;
     if (a === 10) return true;
     if (a === 127) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;
     if (a === 192 && b === 168) return true;
     if (a === 169 && b === 254) return true;
     return false;

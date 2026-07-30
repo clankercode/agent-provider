@@ -49,9 +49,7 @@ describe("isOptionalApplicationOrigin", () => {
   });
 
   it("rejects non-exact or non-http(s) origins", () => {
-    expect(isOptionalApplicationOrigin("https://example.com/path")).toBe(
-      false,
-    );
+    expect(isOptionalApplicationOrigin("https://example.com/path")).toBe(false);
     expect(isOptionalApplicationOrigin("file:///tmp")).toBe(false);
   });
 });

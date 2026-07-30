@@ -16,13 +16,13 @@ CHROMIUM_PATH=/usr/bin/chromium \
 node scripts/launch-agent-provider-browser.mjs
 ```
 
-| Item | Value |
-| --- | --- |
-| Script | `scripts/launch-agent-provider-browser.mjs` |
-| Profile dir | `~/.cache/agent-provider/playwright-profiles/<PROFILE_NAME>` |
-| CDP | `http://127.0.0.1:9333` (also `<profile>/.cdp-endpoint`) |
-| Extension id | written to `<profile>/.extension-id` after SW starts |
-| Extension path | `apps/extension/.output/chrome-mv3` via `--load-extension` |
+| Item           | Value                                                        |
+| -------------- | ------------------------------------------------------------ |
+| Script         | `scripts/launch-agent-provider-browser.mjs`                  |
+| Profile dir    | `~/.cache/agent-provider/playwright-profiles/<PROFILE_NAME>` |
+| CDP            | `http://127.0.0.1:9333` (also `<profile>/.cdp-endpoint`)     |
+| Extension id   | written to `<profile>/.extension-id` after SW starts         |
+| Extension path | `apps/extension/.output/chrome-mv3` via `--load-extension`   |
 
 Leave the launcher process running. Settings, grants, and storage persist
 across relaunches of the same `PROFILE_NAME`.
@@ -55,13 +55,15 @@ Background code uses `browser.windows.create({ type: "popup", focused: true })`.
 
 ```js
 // Prefer exact URL match — options.html also contains "Allow" strings.
-let approval = context.pages().find((p) =>
-  (p.url() || "").includes("approval.html"),
-);
+let approval = context
+  .pages()
+  .find((p) => (p.url() || "").includes("approval.html"));
 
 // Or wait when clicking Connect / Request access:
 const pagePromise = context.waitForEvent("page", { timeout: 10_000 });
-await page.getByRole("button", { name: /Connect Agent Provider|Request access/i }).click();
+await page
+  .getByRole("button", { name: /Connect Agent Provider|Request access/i })
+  .click();
 approval = await pagePromise;
 // rescan if needed:
 approval =
@@ -77,17 +79,20 @@ Always filter on `approval.html`.
 
 Permission prompts (page access):
 
-| Control | Effect |
-| --- | --- |
-| **Allow this tab** | `grant-session` — ends when tab closes |
+| Control                 | Effect                                     |
+| ----------------------- | ------------------------------------------ |
+| **Allow this tab**      | `grant-session` — ends when tab closes     |
 | **Always allow origin** | `grant-persistent` — revocable in settings |
-| **Deny request** | deny |
+| **Deny request**        | deny                                       |
 
 ```js
 await approval.bringToFront();
 await approval.getByRole("button", { name: /Allow this tab/i }).click();
 // finished state: "Request allowed" + Close window
-await approval.getByRole("button", { name: /Close window/i }).click().catch(() => {});
+await approval
+  .getByRole("button", { name: /Close window/i })
+  .click()
+  .catch(() => {});
 ```
 
 Step approvals (`approvalId=…`) use Approve / Deny (and tool-limit grant
@@ -116,12 +121,12 @@ Options → **Pending requests** lists in-flight permission and step approvals
 
 UI messages (extension pages only):
 
-| type | purpose |
-| --- | --- |
-| `pending.list` | `{ ok, pending: PendingRequestView[] }` |
-| `pending.open` | focus/recreate approval window for one item |
-| `permission.set` | grant/deny/revoke (requires trusted tabId+origin) |
-| `approval.get` / `approval.decide` | step approvals by id |
+| type                               | purpose                                           |
+| ---------------------------------- | ------------------------------------------------- |
+| `pending.list`                     | `{ ok, pending: PendingRequestView[] }`           |
+| `pending.open`                     | focus/recreate approval window for one item       |
+| `permission.set`                   | grant/deny/revoke (requires trusted tabId+origin) |
+| `approval.get` / `approval.decide` | step approvals by id                              |
 
 Useful when the popup is behind other windows or CDP lost the page event.
 

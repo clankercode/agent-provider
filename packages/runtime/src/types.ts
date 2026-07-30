@@ -107,12 +107,7 @@ export interface ApprovalRequest {
 }
 
 export type RuntimeConnectionState =
-  | "idle"
-  | "connecting"
-  | "ready"
-  | "needs-enable"
-  | "unavailable"
-  | "error";
+  "idle" | "connecting" | "ready" | "needs-enable" | "unavailable" | "error";
 
 export type RuntimeRunState = "idle" | "submitting" | "streaming" | "error";
 

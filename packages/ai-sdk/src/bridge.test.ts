@@ -169,6 +169,8 @@ function testCapabilities(): BridgeCapabilities {
     permission: "granted-session",
     providerConfigured: true,
     aliases: ["default"],
+    aliasModels: { default: "test-model" },
+    aliasReasoning: {},
     limits: {
       maxRequestBytes: 100_000,
       maxOutputTokens: 2_000,

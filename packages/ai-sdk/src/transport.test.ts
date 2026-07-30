@@ -60,6 +60,8 @@ describe("WindowAgentProviderTransport", () => {
         permission: "prompt",
         providerConfigured: false,
         aliases: ["default"],
+        aliasModels: {},
+        aliasReasoning: {},
         limits: {
           maxRequestBytes: 1_000,
           maxOutputTokens: 100,

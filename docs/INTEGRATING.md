@@ -66,11 +66,11 @@ export function Copilot() {
 
 ### Launcher placement (first-class)
 
-| Prop / attribute | Purpose |
-| --- | --- |
-| `placement` / `data-placement` | `bottom-right` (default), `bottom-left`, `top-right`, `top-left` |
-| `insets` / `--agent-provider-inset-*` | Edge offsets (`number` → px, or CSS length string) |
-| `visible` / `data-visible` | Fade the whole launcher (probe gating) |
+| Prop / attribute                      | Purpose                                                          |
+| ------------------------------------- | ---------------------------------------------------------------- |
+| `placement` / `data-placement`        | `bottom-right` (default), `bottom-left`, `top-right`, `top-left` |
+| `insets` / `--agent-provider-inset-*` | Edge offsets (`number` → px, or CSS length string)               |
+| `visible` / `data-visible`            | Fade the whole launcher (probe gating)                           |
 
 Hosts may set `data-placement` and CSS variables themselves if they build a
 custom dock (as control-server does) instead of using `AgentProviderLauncher`.
@@ -80,13 +80,13 @@ custom dock (as control-server does) instead of using `AgentProviderLauncher`.
 **New in 0.1.4** — `AgentProviderChat` and `AgentProviderLauncher` gained
 these props:
 
-| Prop | Type | Default | Purpose |
-| --- | --- | --- | --- |
-| `headerLabel` | `string \| ((info: { toolCount: number; modelLabel: string }) => string)` | auto | Override the subtitle. Default: `Page tools (n) · Model: gpt-5-mini high` |
-| `thinkingColor` | `string` | accent | CSS color for the thinking dots animation (also settable via `--agent-provider-thinking`) |
-| `markdown` | `boolean` | `true` | Render assistant messages with markdown (bold, italic, code, links, headings, lists) |
-| `draggable` | `boolean` | `false` | Let the launcher panel be dragged out of its docked corner |
-| `showToolActivity` | `boolean` | `true` | Show collapsible tool-call indicators in the transcript |
+| Prop               | Type                                                                      | Default | Purpose                                                                                   |
+| ------------------ | ------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------- |
+| `headerLabel`      | `string \| ((info: { toolCount: number; modelLabel: string }) => string)` | auto    | Override the subtitle. Default: `Page tools (n) · Model: gpt-5-mini high`                 |
+| `thinkingColor`    | `string`                                                                  | accent  | CSS color for the thinking dots animation (also settable via `--agent-provider-thinking`) |
+| `markdown`         | `boolean`                                                                 | `true`  | Render assistant messages with markdown (bold, italic, code, links, headings, lists)      |
+| `draggable`        | `boolean`                                                                 | `false` | Let the launcher panel be dragged out of its docked corner                                |
+| `showToolActivity` | `boolean`                                                                 | `true`  | Show collapsible tool-call indicators in the transcript                                   |
 
 `headerLabel` examples:
 
@@ -114,13 +114,13 @@ to pop it out to a fixed position; click **Dock** to return it to the corner.
 `runtime.connect()` / auto-connect probes the **extension bridge**, not the
 model grant. Treat these separately:
 
-| `state.connection` | Meaning | Typical UI |
-| --- | --- | --- |
-| `idle` / `connecting` | Probe in flight | Hide launcher or show skeleton |
-| `ready` | Extension answered; check `capabilities.permission` | Show launcher. If permission is not granted, prompt “Allow in extension” |
-| `needs-enable` | Extension is present on the host, but this **exact origin** is not enabled | Show launcher + “Open popup → Enable on this site → reload” |
-| `unavailable` | No content script answered (extension missing, or origin never enabled so nothing is injected) | **Hide** product chrome that depends on AP |
-| `error` | Bridge error (version mismatch, etc.) | Show recoverable error |
+| `state.connection`    | Meaning                                                                                        | Typical UI                                                               |
+| --------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `idle` / `connecting` | Probe in flight                                                                                | Hide launcher or show skeleton                                           |
+| `ready`               | Extension answered; check `capabilities.permission`                                            | Show launcher. If permission is not granted, prompt “Allow in extension” |
+| `needs-enable`        | Extension is present on the host, but this **exact origin** is not enabled                     | Show launcher + “Open popup → Enable on this site → reload”              |
+| `unavailable`         | No content script answered (extension missing, or origin never enabled so nothing is injected) | **Hide** product chrome that depends on AP                               |
+| `error`               | Bridge error (version mismatch, etc.)                                                          | Show recoverable error                                                   |
 
 Model grant is **not** a connection failure:
 
@@ -130,8 +130,7 @@ Model grant is **not** a connection failure:
 ### Recommended host visibility rule
 
 ```ts
-const probeSettled =
-  connection !== "idle" && connection !== "connecting";
+const probeSettled = connection !== "idle" && connection !== "connecting";
 const showDock = probeSettled && connection !== "unavailable";
 ```
 

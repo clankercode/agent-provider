@@ -76,13 +76,13 @@ Components:
 **New in 0.1.4** — additional props on `AgentProviderChat` and
 `AgentProviderLauncher`:
 
-| Prop | Type | Default | Purpose |
-| --- | --- | --- | --- |
-| `headerLabel` | `string \| ((info: { toolCount: number; modelLabel: string }) => string)` | auto | Override the header subtitle. Default: `Page tools (n) · Model: gpt-5-mini high` |
-| `thinkingColor` | `string` | accent | CSS color for thinking dots (also via `--agent-provider-thinking`) |
-| `markdown` | `boolean` | `true` | Render assistant messages with markdown formatting |
-| `draggable` | `boolean` | `false` | Let the launcher panel be dragged out of its docked corner |
-| `showToolActivity` | `boolean` | `true` | Show collapsible tool-call indicators |
+| Prop               | Type                                                                      | Default | Purpose                                                                          |
+| ------------------ | ------------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------- |
+| `headerLabel`      | `string \| ((info: { toolCount: number; modelLabel: string }) => string)` | auto    | Override the header subtitle. Default: `Page tools (n) · Model: gpt-5-mini high` |
+| `thinkingColor`    | `string`                                                                  | accent  | CSS color for thinking dots (also via `--agent-provider-thinking`)               |
+| `markdown`         | `boolean`                                                                 | `true`  | Render assistant messages with markdown formatting                               |
+| `draggable`        | `boolean`                                                                 | `false` | Let the launcher panel be dragged out of its docked corner                       |
+| `showToolActivity` | `boolean`                                                                 | `true`  | Show collapsible tool-call indicators                                            |
 
 Also new in 0.1.4: assistant message role label is "Agent" (was
 "AgentProvider"). Tool-call indicators show live status dots, tool name, and

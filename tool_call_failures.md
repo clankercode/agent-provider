@@ -9,18 +9,18 @@
 TypeError: Cannot read properties of undefined (reading 'digest')
 ```
 
-Model chat without tool execution can still work (tool *catalog* listing from the model is fine). Tool *runs* die before the host `execute()` body runs.
+Model chat without tool execution can still work (tool _catalog_ listing from the model is fine). Tool _runs_ die before the host `execute()` body runs.
 
 ---
 
 ## Verdict
 
-| Layer | Responsible? | Notes |
-| --- | --- | --- |
-| control-server WebMCP handlers | **No** | Failure happens before host tool `execute` |
-| control-server CONTROL_TOKEN | **No** | Same error on unauthenticated tools (`get_control_plane_status`, `auth_status`) |
-| Agent Provider page runtime / protocol | **Yes** | `sha256Canonical` requires `crypto.subtle.digest` |
-| Agent Provider extension SW | Not the first failure | Extension pages are secure contexts; page is not |
+| Layer                                  | Responsible?          | Notes                                                                           |
+| -------------------------------------- | --------------------- | ------------------------------------------------------------------------------- |
+| control-server WebMCP handlers         | **No**                | Failure happens before host tool `execute`                                      |
+| control-server CONTROL_TOKEN           | **No**                | Same error on unauthenticated tools (`get_control_plane_status`, `auth_status`) |
+| Agent Provider page runtime / protocol | **Yes**               | `sha256Canonical` requires `crypto.subtle.digest`                               |
+| Agent Provider extension SW            | Not the first failure | Extension pages are secure contexts; page is not                                |
 
 This is **Agent Provider**. control-server should not try to polyfill Web Crypto to paper over it long-term (though HTTPS dogfood would mask it).
 
@@ -103,7 +103,7 @@ Problems with the in-tree fallback as written (must fix before relying on it):
 
 ---
 
-## What is *not* broken
+## What is _not_ broken
 
 - Extension inject / bootstrap / grant on dogfood hosts (after host-match + maxTools fixes).
 - Model generate/stream over the bridge (no page-side subtle required for the model path itself).
@@ -162,15 +162,15 @@ On `http://10.42.0.8:15066` with AP extension granted:
 
 ## Quick references
 
-| Item | Path / value |
-| --- | --- |
-| Page hasher (source, has partial fallback) | `packages/protocol/src/canonical.ts` → `sha256Canonical` |
-| Page tool wrapper | `packages/runtime/src/tools.ts` → `createToolSet` |
-| Extension hash check | `apps/extension/entrypoints/background.ts` → `isHash` |
-| Extension hasher (subtle-only) | `apps/extension/lib/canonical-json.ts` |
-| Published protocol (broken on LAN HTTP) | `node_modules/@agent-provider/protocol@0.1.3` `sha256Canonical` |
-| Integrator dogfood page | `http://10.42.0.8:15066/` / `http://10.100.1.2:15066/` |
-| Playwright notes | `docs/PLAYWRIGHT-DOGFOOD.md` |
+| Item                                       | Path / value                                                    |
+| ------------------------------------------ | --------------------------------------------------------------- |
+| Page hasher (source, has partial fallback) | `packages/protocol/src/canonical.ts` → `sha256Canonical`        |
+| Page tool wrapper                          | `packages/runtime/src/tools.ts` → `createToolSet`               |
+| Extension hash check                       | `apps/extension/entrypoints/background.ts` → `isHash`           |
+| Extension hasher (subtle-only)             | `apps/extension/lib/canonical-json.ts`                          |
+| Published protocol (broken on LAN HTTP)    | `node_modules/@agent-provider/protocol@0.1.3` `sha256Canonical` |
+| Integrator dogfood page                    | `http://10.42.0.8:15066/` / `http://10.100.1.2:15066/`          |
+| Playwright notes                           | `docs/PLAYWRIGHT-DOGFOOD.md`                                    |
 
 ---
 
