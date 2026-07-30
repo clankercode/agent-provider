@@ -297,30 +297,35 @@
 
 /* Tool call indicators */
 .agent-provider-tool {
-  margin: 6px 0;
+  margin: 2px 0;
   border: 1px solid var(--agent-provider-border);
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
-  background: var(--agent-provider-panel-2, var(--agent-provider-panel));
-  font-size: 12px;
+  background: color-mix(
+    in srgb,
+    var(--agent-provider-panel-2, var(--agent-provider-panel)) 70%,
+    transparent
+  );
+  font-size: 11px;
 }
 .agent-provider-tool__header {
   display: flex;
   width: 100%;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   border: 0;
-  padding: 5px 8px;
+  padding: 2px 6px;
   background: transparent;
-  color: var(--agent-provider-text);
+  color: var(--agent-provider-muted);
   cursor: pointer;
   font: inherit;
   text-align: left;
+  line-height: 1.4;
 }
 .agent-provider-tool__status {
   display: inline-block;
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   flex: none;
   border-radius: 50%;
   background: var(--agent-provider-muted);
@@ -342,7 +347,7 @@
   background: gold;
 }
 .agent-provider-tool__name {
-  font-weight: 600;
+  font-weight: 500;
 }
 .agent-provider-tool__phase {
   margin-left: auto;
@@ -351,14 +356,6 @@
 }
 .agent-provider-tool__chevron {
   color: var(--agent-provider-muted);
-}
-.agent-provider-tool__summary {
-  padding: 2px 8px 5px 24px;
-  color: var(--agent-provider-muted);
-  font-size: 11px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .agent-provider-tool__body {
   padding: 4px 8px 8px;

@@ -370,10 +370,6 @@ function DefaultActivity({
     denied: "denied",
     failed: "failed",
   };
-  const summary =
-    activity.error ??
-    (activity.output ? "result" : activity.input ? "args" : "");
-
   const hasResult = activity.output !== undefined;
 
   return (
@@ -507,8 +503,6 @@ function DefaultActivity({
             </details>
           ) : null}
         </div>
-      ) : summary.length > 0 ? (
-        <div className="agent-provider-tool__summary">{summary}</div>
       ) : null}
     </div>
   );
@@ -706,41 +700,59 @@ export function AgentProviderChat({
       ) : null}
 
       <div className="agent-provider-transcript" aria-live="polite">
-        {state.messages.length === 0 ? (
+        {state.messages.length === 0 && state.toolActivity.length === 0 ? (
           <div className="agent-provider-empty">
             Ask about the current page or let AgentProvider use one of its
             declared tools.
           </div>
         ) : null}
-        {state.messages.map((message) =>
-          Message === undefined ? (
-            <DefaultMessage
-              key={message.id}
-              message={message}
-              markdown={markdown}
-            />
-          ) : (
-            <Message key={message.id} message={message} />
-          ),
-        )}
+        {(() => {
+          // Merge messages and tool activities into a single timeline by
+          // timestamp so tool calls appear inline with the conversation.
+          type TimelineItem =
+            | { kind: "message"; ts: number; data: AgentProviderMessage }
+            | { kind: "tool"; ts: number; data: ToolActivity };
 
-        {showToolActivity
-          ? state.toolActivity
-              .slice(-8)
-              .map((activity) =>
-                CustomActivity ? (
-                  <CustomActivity key={activity.id} activity={activity} />
-                ) : (
-                  <DefaultActivity
-                    key={activity.id}
-                    activity={activity}
-                    {...(toolResultRenderer
-                      ? { resultRenderer: toolResultRenderer }
-                      : {})}
-                  />
-                ),
+          const timeline: TimelineItem[] = [
+            ...state.messages.map((m) => ({
+              kind: "message" as const,
+              ts: m.createdAt,
+              data: m,
+            })),
+            ...(showToolActivity
+              ? state.toolActivity.map((a) => ({
+                  kind: "tool" as const,
+                  ts: a.startedAt,
+                  data: a,
+                }))
+              : []),
+          ];
+          timeline.sort((a, b) => a.ts - b.ts);
+
+          return timeline.map((item) =>
+            item.kind === "message" ? (
+              Message === undefined ? (
+                <DefaultMessage
+                  key={item.data.id}
+                  message={item.data}
+                  markdown={markdown}
+                />
+              ) : (
+                <Message key={item.data.id} message={item.data} />
               )
-          : null}
+            ) : CustomActivity ? (
+              <CustomActivity key={item.data.id} activity={item.data} />
+            ) : (
+              <DefaultActivity
+                key={item.data.id}
+                activity={item.data}
+                {...(toolResultRenderer
+                  ? { resultRenderer: toolResultRenderer }
+                  : {})}
+              />
+            ),
+          );
+        })()}
 
         {state.approvals.map((request) => {
           const approve = () => runtime.resolveApproval(request.id, true);
