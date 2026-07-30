@@ -42,7 +42,7 @@ export interface AgentProviderChatProps {
    * returns a string. When omitted the default format is used:
    * "Page tools (n) · Model: gpt-5-mini high".
    *
-   * New in NEXT_VERSION.
+   * New in 0.1.4.
    */
   headerLabel?:
     string | ((info: { toolCount: number; modelLabel: string }) => string);
@@ -50,14 +50,14 @@ export interface AgentProviderChatProps {
    * CSS custom property for the thinking indicator color. Default uses
    * --agent-provider-accent. Set to a color value to customise.
    *
-   * New in NEXT_VERSION.
+   * New in 0.1.4.
    */
   thinkingColor?: string;
   /**
    * When true, render assistant messages with markdown formatting.
    * Default: true.
    *
-   * New in NEXT_VERSION.
+   * New in 0.1.4.
    */
   markdown?: boolean;
 }
@@ -689,7 +689,7 @@ export interface AgentProviderLauncherProps extends AgentProviderChatProps {
    * the docked corner. The panel becomes position:fixed and follows the
    * cursor. Close/drag back to re-dock.
    *
-   * New in NEXT_VERSION.
+   * New in 0.1.4.
    */
   draggable?: boolean;
 }

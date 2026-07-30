@@ -84,7 +84,7 @@ Pending approvals appear in `state.approvals`; resolve them from your UI with
 
 ### Dev-only debug tools
 
-**New in NEXT_VERSION** — `createDebugTools()` returns a set of side-effect-free
+**New in 0.1.4** — `createDebugTools()` returns a set of side-effect-free
 tools for testing the tool-call pipeline. Guard with `import.meta.env.DEV` —
 never include in production builds.
 
@@ -105,7 +105,7 @@ Available debug tools: `debug_echo`, `debug_echo_delayed`, `debug_sleep`,
 
 ### Runtime getters
 
-**New in NEXT_VERSION** — `AgentProviderRuntime` exposes two read-only
+**New in 0.1.4** — `AgentProviderRuntime` exposes two read-only
 getters for UI display:
 
 - `runtime.toolCount` — number of page-declared tools.

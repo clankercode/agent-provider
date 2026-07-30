@@ -7,7 +7,7 @@ import type { AgentProviderToolDefinitions } from "./types.js";
  * which test async timing). They should NEVER be included in production
  * builds — guard with `import.meta.env.DEV` or a build-time flag.
  *
- * New in NEXT_VERSION.
+ * New in 0.1.4.
  *
  * Usage:
  *   import { createDebugTools } from "@agent-provider/runtime/debug";

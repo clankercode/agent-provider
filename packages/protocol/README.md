@@ -71,7 +71,7 @@ Integrate at that level unless you are building a new bridge implementation.
 - Intended for browser-capable TypeScript or JavaScript environments: the
   codec uses `btoa` / `atob`, and `sha256Canonical` uses
   `globalThis.crypto.subtle` (available in browsers and Node.js 22+).
-- **New in NEXT_VERSION** — `sha256Canonical` now has a pure-JS SHA-256
+- **New in 0.1.4** — `sha256Canonical` now has a pure-JS SHA-256
   fallback (`sha256Hex`) that activates when `crypto.subtle` is unavailable
   (non-secure HTTP origins, sandboxed iframes). Returns the same 64 lowercase
   hex chars as Web Crypto. This fixes tool execution on LAN HTTP dogfood

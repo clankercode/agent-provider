@@ -150,7 +150,7 @@ export class AgentProviderRuntime {
 
   getSnapshot = (): AgentProviderRuntimeState => this.state;
 
-  /** Number of page-declared tools. New in NEXT_VERSION. */
+  /** Number of page-declared tools. New in 0.1.4. */
   get toolCount(): number {
     return Object.keys(this.toolDefinitions).length;
   }

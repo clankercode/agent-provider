@@ -6,7 +6,7 @@
  * Based on FIPS 180-4. Optimised for clarity, not speed — tool approval
  * payloads are small (typically < 10 KiB).
  *
- * New in NEXT_VERSION.
+ * New in 0.1.4.
  */
 
 // Round constants (first 32 bits of the fractional parts of the cube roots

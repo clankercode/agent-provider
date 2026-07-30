@@ -77,9 +77,9 @@ export interface BridgeCapabilities {
   permission: PermissionState;
   providerConfigured: boolean;
   aliases: string[];
-  /** Alias ID → resolved model string (e.g. "gpt-5-mini"). New in NEXT_VERSION. */
+  /** Alias ID → resolved model string (e.g. "gpt-5-mini"). New in 0.1.4. */
   aliasModels: Record<string, string>;
-  /** Alias ID → reasoning effort (e.g. "high"), if set. New in NEXT_VERSION. */
+  /** Alias ID → reasoning effort (e.g. "high"), if set. New in 0.1.4. */
   aliasReasoning: Record<string, string>;
   limits: BridgeLimits;
 }

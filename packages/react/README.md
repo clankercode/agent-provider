@@ -73,7 +73,7 @@ Components:
   the same fade (e.g. while probing for the extension), set `visible={false}`
   or `data-visible="false"` on the `.agent-provider-launcher` element.
 
-**New in NEXT_VERSION** — additional props on `AgentProviderChat` and
+**New in 0.1.4** — additional props on `AgentProviderChat` and
 `AgentProviderLauncher`:
 
 | Prop | Type | Default | Purpose |
@@ -84,7 +84,7 @@ Components:
 | `draggable` | `boolean` | `false` | Let the launcher panel be dragged out of its docked corner |
 | `showToolActivity` | `boolean` | `true` | Show collapsible tool-call indicators |
 
-Also new in NEXT_VERSION: assistant message role label is "Agent" (was
+Also new in 0.1.4: assistant message role label is "Agent" (was
 "AgentProvider"). Tool-call indicators show live status dots, tool name, and
 phase; click to expand args/results (collapsed by default). Error messages show
 a warning icon in the far empty space of each message row. The launcher's

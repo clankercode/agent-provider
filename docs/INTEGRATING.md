@@ -9,7 +9,7 @@ wiring a trusted page to the Agent Provider browser extension.
 - Extension-owned model credentials and provider network calls.
 - Exact-origin consent: the page never sees API keys.
 
-> **New in NEXT_VERSION** — The chat header now shows the real model name and tool
+> **New in 0.1.4** — The chat header now shows the real model name and tool
 > count by default (`Page tools (42) · Model: gpt-5-mini high`). Override with
 > the `headerLabel` prop (string or `(info) => string`). Assistant messages
 > render markdown. There's an in-progress thinking animation, tool-call
@@ -75,9 +75,9 @@ export function Copilot() {
 Hosts may set `data-placement` and CSS variables themselves if they build a
 custom dock (as control-server does) instead of using `AgentProviderLauncher`.
 
-### Chat surface props (NEXT_VERSION additions)
+### Chat surface props (0.1.4 additions)
 
-**New in NEXT_VERSION** — `AgentProviderChat` and `AgentProviderLauncher` gained
+**New in 0.1.4** — `AgentProviderChat` and `AgentProviderLauncher` gained
 these props:
 
 | Prop | Type | Default | Purpose |

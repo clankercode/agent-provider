@@ -154,37 +154,28 @@ for (const [rel, text] of staged) {
 // Ossify NEXT_VERSION markers across the tree: replace every "NEXT_VERSION"
 // with the real version number in docs, READMEs, and source comments.
 // See AGENTS.md for the version-marker convention.
+// Use grep -rl (same as dry-run preview) — execFileSync has no shell, so
+// find's \( ... \) grouping must not be backslash-escaped as separate args.
 const ossifyTargets = [];
 for (const dir of ["docs", "packages", "apps", "examples"]) {
   try {
     const entries = execFileSync(
-      "find",
+      "grep",
       [
+        "-rl",
+        "--include=*.md",
+        "--include=*.ts",
+        "--include=*.tsx",
+        "--include=*.css",
+        "--include=*.json",
+        "NEXT_VERSION",
         join(root, dir),
-        "-type",
-        "f",
-        "\\(",
-        "-name",
-        "*.md",
-        "-o",
-        "-name",
-        "*.ts",
-        "-o",
-        "-name",
-        "*.tsx",
-        "-o",
-        "-name",
-        "*.css",
-        "-o",
-        "-name",
-        "*.json",
-        "\\)",
       ],
       { encoding: "utf8" },
     ).trim();
     if (entries) ossifyTargets.push(...entries.split("\n"));
   } catch {
-    // Directory may not exist in all checkouts; skip.
+    // grep exits non-zero when no matches; directory may be absent.
   }
 }
 
