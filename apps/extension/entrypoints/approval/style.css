@@ -202,6 +202,15 @@ aside button small {
   margin-top: 2px;
   opacity: 0.72;
 }
+.tool-limit-aux {
+  display: flex;
+  gap: 8px;
+}
+.tool-limit-aux button {
+  flex: 1;
+  text-align: center;
+  font-weight: 850;
+}
 .primary {
   border: 1px solid var(--authority);
   background: var(--authority);

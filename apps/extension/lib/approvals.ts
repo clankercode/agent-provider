@@ -23,8 +23,14 @@ export interface ToolApprovalBinding extends CommonApprovalBinding {
   declarationInputHash: string;
 }
 
-export type ApprovalBinding = ProviderApprovalBinding | ToolApprovalBinding;
-export type ApprovalKind = "provider" | "tool";
+export interface ToolLimitApprovalBinding extends CommonApprovalBinding {
+  requestedTools: number;
+  grantedLimit: number;
+}
+
+export type ApprovalBinding =
+  ProviderApprovalBinding | ToolApprovalBinding | ToolLimitApprovalBinding;
+export type ApprovalKind = "provider" | "tool" | "tool-limit";
 export type ApprovalDecision = "approved" | "denied";
 
 export interface ApprovalRecord {

@@ -22,7 +22,7 @@ export type AuthorityPolicyLayer = Partial<AuthorityPolicy>;
 export const DEFAULT_AUTHORITY_POLICY: Readonly<AuthorityPolicy> =
   Object.freeze({
     maxRequestBytes: 512_000,
-    maxOutputTokens: 8_192,
+    maxOutputTokens: 65_536,
     maxConcurrentRequests: 2,
     maxTools: 32,
     requestTimeoutMs: 120_000,

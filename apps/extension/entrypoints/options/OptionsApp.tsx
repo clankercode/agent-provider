@@ -17,8 +17,13 @@ import {
   type ProviderModel,
 } from "../../lib/provider-models.js";
 import {
+  DEFAULT_REASONING_LEVEL,
+  lookupModelCapabilities,
+} from "../../lib/model-capabilities.js";
+import {
   AGENT_PROVIDER_UI_MARKER,
   type AuditView,
+  type PendingRequestView,
   type PopupResponse,
 } from "../../lib/ui-messages.js";
 
@@ -32,6 +37,39 @@ async function readAudit(origin?: string): Promise<AuditView> {
     throw new Error(response.error ?? "The audit ledger is unavailable.");
   }
   return response.audit;
+}
+
+async function readPendingRequests(): Promise<PendingRequestView[]> {
+  const response = (await browser.runtime.sendMessage({
+    marker: AGENT_PROVIDER_UI_MARKER,
+    type: "pending.list",
+  })) as PopupResponse;
+  if (!response.ok) {
+    throw new Error(response.error ?? "Could not load pending requests.");
+  }
+  return response.pending ?? [];
+}
+
+async function openPendingRequest(item: PendingRequestView): Promise<void> {
+  const response = (await browser.runtime.sendMessage(
+    item.kind === "permission"
+      ? {
+          marker: AGENT_PROVIDER_UI_MARKER,
+          type: "pending.open",
+          kind: "permission",
+          tabId: item.tabId,
+          origin: item.origin,
+        }
+      : {
+          marker: AGENT_PROVIDER_UI_MARKER,
+          type: "pending.open",
+          kind: "approval",
+          approvalId: item.approvalId ?? item.id,
+        },
+  )) as PopupResponse;
+  if (!response.ok) {
+    throw new Error(response.error ?? "Could not open that request.");
+  }
 }
 
 async function requestProviderOrigins(
@@ -63,6 +101,76 @@ interface ModelCatalogState {
   models: ProviderModel[];
   selectedId?: string;
   message?: string;
+}
+
+const MODEL_LIST_CACHE_PREFIX = "agent-provider.model-list.v1";
+
+async function readModelListCache(
+  id: string,
+): Promise<ModelCatalogState | undefined> {
+  try {
+    const result = await browser.storage.local.get(MODEL_LIST_CACHE_PREFIX);
+    const bucket = result[MODEL_LIST_CACHE_PREFIX];
+    if (
+      typeof bucket !== "object" ||
+      bucket === null ||
+      Array.isArray(bucket)
+    ) {
+      return undefined;
+    }
+    const entry = (bucket as Record<string, unknown>)[id];
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+      return undefined;
+    }
+    const models = (entry as { models?: unknown }).models;
+    if (!Array.isArray(models)) return undefined;
+    const parsed: ProviderModel[] = models
+      .filter(
+        (m): m is { id: string; displayName?: string } =>
+          typeof m === "object" &&
+          m !== null &&
+          typeof (m as { id?: unknown }).id === "string",
+      )
+      .map((m) => {
+        const dn = (m as { displayName?: unknown }).displayName;
+        const out: ProviderModel = {
+          id: (m as { id: string }).id,
+          ...(typeof dn === "string" ? { displayName: dn } : {}),
+        };
+        return out;
+      });
+    if (parsed.length === 0) return undefined;
+    const randomIndex = Math.floor(Math.random() * parsed.length);
+    const selectedId = parsed[randomIndex]?.id ?? parsed[0]?.id ?? "";
+    return {
+      phase: "ready",
+      models: parsed,
+      ...(selectedId === "" ? {} : { selectedId }),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function writeModelListCache(
+  id: string,
+  models: ProviderModel[],
+): Promise<void> {
+  try {
+    const result = await browser.storage.local.get(MODEL_LIST_CACHE_PREFIX);
+    const existing =
+      typeof result[MODEL_LIST_CACHE_PREFIX] === "object" &&
+      result[MODEL_LIST_CACHE_PREFIX] !== null &&
+      !Array.isArray(result[MODEL_LIST_CACHE_PREFIX])
+        ? (result[MODEL_LIST_CACHE_PREFIX] as Record<string, unknown>)
+        : {};
+    existing[id] = { models, cachedAt: Date.now() };
+    await browser.storage.local.set({
+      [MODEL_LIST_CACHE_PREFIX]: existing,
+    });
+  } catch {
+    // Non-fatal: cache write failures just mean a re-pull next time.
+  }
 }
 
 function settingsSnapshot(
@@ -168,6 +276,9 @@ export function OptionsApp() {
     initialAuditOrigin === null ? undefined : initialAuditOrigin,
   );
   const [confirmAuditDelete, setConfirmAuditDelete] = useState(false);
+  const [pending, setPending] = useState<PendingRequestView[]>([]);
+  const [pendingError, setPendingError] = useState<string>();
+  const [pendingBusyId, setPendingBusyId] = useState<string>();
 
   useEffect(() => {
     void loadSettings().then((loaded) => {
@@ -175,10 +286,45 @@ export function OptionsApp() {
       setSettings(loaded);
       setAliasesText(loadedAliases);
       setSavedSnapshot(settingsSnapshot(loaded, loadedAliases));
+      // Hydrate model catalogs from the on-disk cache so they appear
+      // instantly without a network pull. Selection defaults to a random
+      // model.
+      void (async () => {
+        const ids = ["legacy-openai", ...Object.keys(loaded.profiles)];
+        const entries = await Promise.all(
+          ids.map(async (id) => [id, await readModelListCache(id)] as const),
+        );
+        setModelCatalogs((current) => {
+          const next = { ...current };
+          for (const [id, cached] of entries) {
+            if (cached !== undefined && next[id] === undefined) {
+              next[id] = cached;
+            }
+          }
+          return next;
+        });
+      })();
     });
     void readAudit(initialAuditOrigin ?? undefined)
       .then(setAudit)
       .catch(() => undefined);
+    void readPendingRequests()
+      .then(setPending)
+      .catch((cause) =>
+        setPendingError(cause instanceof Error ? cause.message : String(cause)),
+      );
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void readPendingRequests()
+        .then((items) => {
+          setPending(items);
+          setPendingError(undefined);
+        })
+        .catch(() => undefined);
+    }, 2_500);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(
@@ -283,14 +429,19 @@ export function OptionsApp() {
         signal: controller.signal,
       });
       if (modelCatalogRequests.current.get(id) !== controller) return;
+      const randomIndex =
+        models.length > 0 ? Math.floor(Math.random() * models.length) : 0;
       setModelCatalogs((current) => ({
         ...current,
         [id]: {
           phase: "ready",
           models,
-          ...(models[0] === undefined ? {} : { selectedId: models[0].id }),
+          ...(models[0] === undefined
+            ? {}
+            : { selectedId: models[randomIndex]?.id ?? models[0]!.id }),
         },
       }));
+      await writeModelListCache(id, models);
     } catch (cause) {
       if (
         controller.signal.aborted ||
@@ -321,7 +472,7 @@ export function OptionsApp() {
     });
   }
 
-  function useModelForDefaultAlias(
+  async function useModelForDefaultAlias(
     profileId: string | undefined,
     modelId: string,
   ) {
@@ -330,14 +481,28 @@ export function OptionsApp() {
       if (!isRecord(aliases))
         throw new TypeError("Alias map must be an object.");
       const existing = isRecord(aliases.default) ? aliases.default : {};
+
+      // Resolve capabilities from the models.dev catalog for a sensible
+      // maxOutputTokens and reasoning default. Falls back to 64k + no
+      // reasoning when the catalog is unavailable or the model is unknown.
+      const profile =
+        profileId === undefined ? undefined : settings.profiles[profileId];
+      const family = profile?.family ?? "openai-compatible";
+      const caps = await lookupModelCapabilities(family, modelId);
+
       const defaultAlias: Record<string, unknown> = {
         ...existing,
         model: modelId,
         maxOutputTokens:
           typeof existing.maxOutputTokens === "number"
             ? existing.maxOutputTokens
-            : 2_048,
+            : caps.maxOutputTokens,
       };
+      // Default reasoning to "high" for reasoning-capable models when the
+      // user hasn't already set it.
+      if (caps.supportsReasoning && typeof existing.reasoning !== "string") {
+        defaultAlias.reasoning = DEFAULT_REASONING_LEVEL;
+      }
       if (profileId === undefined) delete defaultAlias.profileId;
       else defaultAlias.profileId = profileId;
       setAliasesText(
@@ -454,6 +619,163 @@ export function OptionsApp() {
       </header>
 
       <form onSubmit={(event) => void submit(event)}>
+        <section data-testid="pending-requests">
+          <div className="section-heading">
+            <div>
+              <span className="eyebrow">Live authority</span>
+              <h2>Pending requests</h2>
+              <p>
+                Page-access grants and step approvals waiting for a decision.
+                Open one here if the popup window was missed or closed.
+              </p>
+            </div>
+            <div className="pending-heading-actions">
+              <span className={pending.length > 0 ? "warn" : "good"}>
+                {pending.length === 0
+                  ? "None waiting"
+                  : `${pending.length} waiting`}
+              </span>
+              <button
+                className="secondary"
+                type="button"
+                data-testid="pending-refresh"
+                onClick={() => {
+                  void readPendingRequests()
+                    .then((items) => {
+                      setPending(items);
+                      setPendingError(undefined);
+                    })
+                    .catch((cause) =>
+                      setPendingError(
+                        cause instanceof Error ? cause.message : String(cause),
+                      ),
+                    );
+                }}
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+          {pendingError ? <div className="error">{pendingError}</div> : null}
+          {pending.length === 0 ? (
+            <div className="empty-state">
+              <strong>No pending requests</strong>
+              <span>
+                When a trusted page asks to use your model (or a tool/step needs
+                approval), it appears here until you decide or it expires.
+              </span>
+            </div>
+          ) : (
+            <ul className="pending-list">
+              {pending.map((item) => (
+                <li key={item.id} data-testid="pending-request-item">
+                  <div className="pending-main">
+                    <span className="eyebrow">{item.kind}</span>
+                    <strong>{item.summary}</strong>
+                    <code>{item.origin}</code>
+                    {item.reason ? (
+                      <span className="pending-reason">{item.reason}</span>
+                    ) : null}
+                    <time dateTime={new Date(item.expiresAt).toISOString()}>
+                      expires {new Date(item.expiresAt).toLocaleTimeString()}
+                    </time>
+                  </div>
+                  <div className="pending-actions">
+                    <button
+                      className="primary"
+                      type="button"
+                      disabled={pendingBusyId === item.id}
+                      data-testid="pending-open"
+                      onClick={() => {
+                        setPendingBusyId(item.id);
+                        void openPendingRequest(item)
+                          .catch((cause) =>
+                            setPendingError(
+                              cause instanceof Error
+                                ? cause.message
+                                : String(cause),
+                            ),
+                          )
+                          .finally(() => setPendingBusyId(undefined));
+                      }}
+                    >
+                      Review / approve
+                    </button>
+                    {item.kind === "permission" ? (
+                      <>
+                        <button
+                          className="secondary"
+                          type="button"
+                          disabled={
+                            pendingBusyId === item.id ||
+                            item.tabId === undefined
+                          }
+                          onClick={() => {
+                            if (item.tabId === undefined) return;
+                            setPendingBusyId(item.id);
+                            void browser.runtime
+                              .sendMessage({
+                                marker: AGENT_PROVIDER_UI_MARKER,
+                                type: "permission.set",
+                                tabId: item.tabId,
+                                origin: item.origin,
+                                decision: "grant-session",
+                              })
+                              .then(() => readPendingRequests())
+                              .then(setPending)
+                              .catch((cause) =>
+                                setPendingError(
+                                  cause instanceof Error
+                                    ? cause.message
+                                    : String(cause),
+                                ),
+                              )
+                              .finally(() => setPendingBusyId(undefined));
+                          }}
+                        >
+                          Allow tab
+                        </button>
+                        <button
+                          className="danger-link"
+                          type="button"
+                          disabled={
+                            pendingBusyId === item.id ||
+                            item.tabId === undefined
+                          }
+                          onClick={() => {
+                            if (item.tabId === undefined) return;
+                            setPendingBusyId(item.id);
+                            void browser.runtime
+                              .sendMessage({
+                                marker: AGENT_PROVIDER_UI_MARKER,
+                                type: "permission.set",
+                                tabId: item.tabId,
+                                origin: item.origin,
+                                decision: "deny",
+                              })
+                              .then(() => readPendingRequests())
+                              .then(setPending)
+                              .catch((cause) =>
+                                setPendingError(
+                                  cause instanceof Error
+                                    ? cause.message
+                                    : String(cause),
+                                ),
+                              )
+                              .finally(() => setPendingBusyId(undefined));
+                          }}
+                        >
+                          Deny
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         <section>
           <div className="section-heading">
             <div>
@@ -559,14 +881,25 @@ export function OptionsApp() {
                   </div>
                   <label>
                     API key
-                    <input
-                      type={showKey ? "text" : "password"}
-                      autoComplete="off"
-                      value={profile.apiKey}
-                      onChange={(event) =>
-                        updateProfile(id, { apiKey: event.currentTarget.value })
-                      }
-                    />
+                    <div className="inline">
+                      <input
+                        type={showKey ? "text" : "password"}
+                        autoComplete="off"
+                        value={profile.apiKey}
+                        onChange={(event) =>
+                          updateProfile(id, {
+                            apiKey: event.currentTarget.value,
+                          })
+                        }
+                      />
+                      <button
+                        className="secondary"
+                        type="button"
+                        onClick={() => setShowKey((current) => !current)}
+                      >
+                        {showKey ? "Hide" : "Show"}
+                      </button>
+                    </div>
                   </label>
                   <ModelCatalog
                     state={modelCatalogs[id]}
@@ -576,7 +909,9 @@ export function OptionsApp() {
                     }
                     onPull={() => void pullModels(id, profile)}
                     onSelect={(modelId) => selectModel(id, modelId)}
-                    onUse={(modelId) => useModelForDefaultAlias(id, modelId)}
+                    onUse={(modelId) =>
+                      void useModelForDefaultAlias(id, modelId)
+                    }
                   />
                 </article>
               ))}
@@ -584,86 +919,90 @@ export function OptionsApp() {
           )}
         </section>
 
-        <section>
-          <div className="section-heading">
-            <div>
-              <h2>Legacy OpenAI profile</h2>
-              <p>
-                The key is stored in extension-local storage and is never sent
-                into page JavaScript.
-              </p>
+        {import.meta.env.DEV ? (
+          <section>
+            <div className="section-heading">
+              <div>
+                <h2>Legacy OpenAI profile</h2>
+                <p>
+                  The key is stored in extension-local storage and is never sent
+                  into page JavaScript.
+                </p>
+              </div>
+              <span className={settings.provider.apiKey ? "good" : "warn"}>
+                {settings.provider.apiKey ? "Configured" : "Needs key"}
+              </span>
             </div>
-            <span className={settings.provider.apiKey ? "good" : "warn"}>
-              {settings.provider.apiKey ? "Configured" : "Needs key"}
-            </span>
-          </div>
 
-          <label>
-            Base endpoint
-            <input
-              type="url"
-              value={settings.provider.endpoint}
-              onChange={(event) =>
-                updateLegacyProvider({ endpoint: event.currentTarget.value })
+            <label>
+              Base endpoint
+              <input
+                type="url"
+                value={settings.provider.endpoint}
+                onChange={(event) =>
+                  updateLegacyProvider({ endpoint: event.currentTarget.value })
+                }
+              />
+            </label>
+
+            <label>
+              API key
+              <div className="inline">
+                <input
+                  type={showKey ? "text" : "password"}
+                  autoComplete="off"
+                  value={settings.provider.apiKey}
+                  placeholder="sk-…"
+                  onChange={(event) =>
+                    updateLegacyProvider({ apiKey: event.currentTarget.value })
+                  }
+                />
+                <button
+                  className="secondary"
+                  type="button"
+                  onClick={() => setShowKey((current) => !current)}
+                >
+                  {showKey ? "Hide" : "Show"}
+                </button>
+              </div>
+            </label>
+
+            <div className="grid">
+              <label>
+                Organization (optional)
+                <input
+                  value={settings.provider.organization}
+                  onChange={(event) =>
+                    updateLegacyProvider({
+                      organization: event.currentTarget.value,
+                    })
+                  }
+                />
+              </label>
+              <label>
+                Project (optional)
+                <input
+                  value={settings.provider.project}
+                  onChange={(event) =>
+                    updateLegacyProvider({ project: event.currentTarget.value })
+                  }
+                />
+              </label>
+            </div>
+            <ModelCatalog
+              state={modelCatalogs["legacy-openai"]}
+              disabled={
+                legacyProfile.apiKey.trim().length === 0 ||
+                legacyProfile.endpoint.trim().length === 0
+              }
+              onPull={() => void pullModels("legacy-openai", legacyProfile)}
+              onSelect={(modelId) => selectModel("legacy-openai", modelId)}
+              onUse={(modelId) =>
+                void useModelForDefaultAlias(undefined, modelId)
               }
             />
-          </label>
-
-          <label>
-            API key
-            <div className="inline">
-              <input
-                type={showKey ? "text" : "password"}
-                autoComplete="off"
-                value={settings.provider.apiKey}
-                placeholder="sk-…"
-                onChange={(event) =>
-                  updateLegacyProvider({ apiKey: event.currentTarget.value })
-                }
-              />
-              <button
-                className="secondary"
-                type="button"
-                onClick={() => setShowKey((current) => !current)}
-              >
-                {showKey ? "Hide" : "Show"}
-              </button>
-            </div>
-          </label>
-
-          <div className="grid">
-            <label>
-              Organization (optional)
-              <input
-                value={settings.provider.organization}
-                onChange={(event) =>
-                  updateLegacyProvider({
-                    organization: event.currentTarget.value,
-                  })
-                }
-              />
-            </label>
-            <label>
-              Project (optional)
-              <input
-                value={settings.provider.project}
-                onChange={(event) =>
-                  updateLegacyProvider({ project: event.currentTarget.value })
-                }
-              />
-            </label>
-          </div>
-          <ModelCatalog
-            state={modelCatalogs["legacy-openai"]}
-            disabled={
-              legacyProfile.apiKey.trim().length === 0 ||
-              legacyProfile.endpoint.trim().length === 0
-            }
-            onPull={() => void pullModels("legacy-openai", legacyProfile)}
-            onSelect={(modelId) => selectModel("legacy-openai", modelId)}
-            onUse={(modelId) => useModelForDefaultAlias(undefined, modelId)}
-          />
-        </section>
+          </section>
+        ) : null}
 
         <section>
           <h2>Model aliases</h2>
@@ -681,13 +1020,7 @@ export function OptionsApp() {
               onChange={(event) => setAliasesText(event.currentTarget.value)}
             />
           </label>
-          <pre className="example">{`{
-  "default": {
-    "model": "gpt-5-mini",
-    "maxOutputTokens": 2048,
-    "reasoning": "low"
-  }
-}`}</pre>
+          <pre className="example">{`{\n  "default": {\n    "model": "gpt-5-mini",\n    "maxOutputTokens": 65536,\n    "reasoning": "high"\n  }\n}`}</pre>
         </section>
 
         <section>

@@ -39,6 +39,7 @@ import {
   IndexedDbApprovalStore,
   type ProviderApprovalBinding,
   type ToolApprovalBinding,
+  type ToolLimitApprovalBinding,
 } from "../lib/approvals.js";
 import { fingerprintCanonicalJson } from "../lib/canonical-json.js";
 import { PersistentQuotaManager } from "../lib/persistent-quotas.js";
@@ -70,8 +71,10 @@ import {
 import {
   isPopupRequest,
   type ApprovalPrompt,
+  type PendingRequestView,
   type ProviderApprovalPrompt,
   type ToolApprovalPrompt,
+  type ToolLimitApprovalPrompt,
   type PopupResponse,
   type PopupStatus,
 } from "../lib/ui-messages.js";
@@ -104,7 +107,11 @@ const approvalStore = new IndexedDbApprovalStore();
 let persistentAuditError = false;
 let quotaRecovery: Promise<void> | undefined;
 
-function bridgeLog(level: "debug" | "info" | "warn" | "error", message: string, detail?: unknown): void {
+function bridgeLog(
+  level: "debug" | "info" | "warn" | "error",
+  message: string,
+  detail?: unknown,
+): void {
   const prefix = `[agent-provider] ${message}`;
   if (detail === undefined) {
     console[level](prefix);
@@ -118,7 +125,9 @@ async function loadEnabledOrigins(): Promise<Set<string>> {
   const value = stored[ENABLED_ORIGINS_KEY];
   if (!Array.isArray(value)) return new Set();
   return new Set(
-    value.filter((item): item is string => typeof item === "string" && item.length > 0),
+    value.filter(
+      (item): item is string => typeof item === "string" && item.length > 0,
+    ),
   );
 }
 
@@ -128,7 +137,10 @@ async function saveEnabledOrigins(origins: Set<string>): Promise<void> {
   });
 }
 
-async function markOriginEnabled(origin: string, enabled: boolean): Promise<void> {
+async function markOriginEnabled(
+  origin: string,
+  enabled: boolean,
+): Promise<void> {
   const origins = await loadEnabledOrigins();
   if (enabled) origins.add(origin);
   else origins.delete(origin);
@@ -136,6 +148,11 @@ async function markOriginEnabled(origin: string, enabled: boolean): Promise<void
 }
 
 interface PendingPermission {
+  tabId: number;
+  origin: string;
+  reason?: string;
+  createdAt: number;
+  expiresAt: number;
   complete(decision: PermissionDecision): Promise<void>;
   dispose(): void;
 }
@@ -144,8 +161,13 @@ const pendingPermissions = new Map<string, PendingPermission>();
 
 interface PendingProviderApproval {
   prompt: ApprovalPrompt;
-  binding: ProviderApprovalBinding | ToolApprovalBinding;
-  complete(decision: "approved" | "denied"): Promise<void>;
+  createdAt: number;
+  binding:
+    ProviderApprovalBinding | ToolApprovalBinding | ToolLimitApprovalBinding;
+  complete(
+    decision: "approved" | "denied",
+    grantedLimit?: number,
+  ): Promise<void>;
 }
 
 const pendingApprovals = new Map<string, PendingProviderApproval>();
@@ -161,6 +183,117 @@ const MAX_CLIENTS_PER_TAB = 32;
 
 function sessionKey(tabId: number, origin: string): string {
   return `${tabId}:${origin}`;
+}
+
+function listPendingRequests(): PendingRequestView[] {
+  const now = Date.now();
+  const out: PendingRequestView[] = [];
+
+  for (const [key, pending] of pendingPermissions) {
+    if (pending.expiresAt <= now) continue;
+    const query = new URLSearchParams({
+      tabId: String(pending.tabId),
+      origin: pending.origin,
+      ...(pending.reason === undefined ? {} : { reason: pending.reason }),
+    });
+    out.push({
+      kind: "permission",
+      id: `permission:${key}`,
+      tabId: pending.tabId,
+      origin: pending.origin,
+      ...(pending.reason === undefined ? {} : { reason: pending.reason }),
+      summary: "Page wants to use your model",
+      createdAt: pending.createdAt,
+      expiresAt: pending.expiresAt,
+      openUrl: browser.runtime.getURL(`/approval.html?${query.toString()}`),
+    });
+  }
+
+  for (const [id, pending] of pendingApprovals) {
+    if (pending.prompt.expiresAt <= now) continue;
+    const prompt = pending.prompt;
+    const openUrl = browser.runtime.getURL(`/approval.html?approvalId=${id}`);
+    if (prompt.kind === "provider") {
+      out.push({
+        kind: "provider",
+        id,
+        origin: prompt.origin,
+        summary: `Audit-first model dispatch (${prompt.alias})`,
+        createdAt: pending.createdAt,
+        expiresAt: prompt.expiresAt,
+        openUrl,
+        approvalId: id,
+        alias: prompt.alias,
+      });
+    } else if (prompt.kind === "tool") {
+      out.push({
+        kind: "tool",
+        id,
+        origin: prompt.origin,
+        summary: `Tool approval: ${prompt.toolName} (${prompt.risk})`,
+        createdAt: pending.createdAt,
+        expiresAt: prompt.expiresAt,
+        openUrl,
+        approvalId: id,
+        toolName: prompt.toolName,
+        risk: prompt.risk,
+      });
+    } else {
+      out.push({
+        kind: "tool-limit",
+        id,
+        origin: prompt.origin,
+        summary: `Tool limit: page asked for ${prompt.requestedTools} (cap ${prompt.currentLimit})`,
+        createdAt: pending.createdAt,
+        expiresAt: prompt.expiresAt,
+        openUrl,
+        approvalId: id,
+        requestedTools: prompt.requestedTools,
+        currentLimit: prompt.currentLimit,
+      });
+    }
+  }
+
+  return out.sort((a, b) => b.createdAt - a.createdAt);
+}
+
+async function openPendingRequest(value: {
+  kind: "permission" | "approval";
+  tabId?: number;
+  origin?: string;
+  approvalId?: string;
+}): Promise<void> {
+  let url: string | undefined;
+  if (value.kind === "approval") {
+    if (value.approvalId === undefined || !pendingApprovals.has(value.approvalId)) {
+      throw new Error("That approval is no longer pending.");
+    }
+    url = browser.runtime.getURL(
+      `/approval.html?approvalId=${value.approvalId}`,
+    );
+  } else {
+    if (value.tabId === undefined || value.origin === undefined) {
+      throw new Error("Missing tab/origin for permission request.");
+    }
+    const key = sessionKey(value.tabId, value.origin);
+    const pending = pendingPermissions.get(key);
+    if (pending === undefined) {
+      throw new Error("That page-access request is no longer pending.");
+    }
+    const query = new URLSearchParams({
+      tabId: String(pending.tabId),
+      origin: pending.origin,
+      ...(pending.reason === undefined ? {} : { reason: pending.reason }),
+    });
+    url = browser.runtime.getURL(`/approval.html?${query.toString()}`);
+  }
+  await browser.windows.create({
+    url,
+    type: "popup",
+    width: 760,
+    height: 590,
+    focused: true,
+  });
 }
 
 async function dynamicContentScriptId(origin: string): Promise<string> {
@@ -520,6 +653,7 @@ async function requestProviderApproval(input: {
     }, 120_000);
     pendingApprovals.set(id, {
       prompt,
+      createdAt: Date.now(),
       binding: input.binding,
       complete: async (decision) => {
         clearTimeout(timer);
@@ -597,6 +731,7 @@ async function requestToolApproval(input: {
     }, 120_000);
     pendingApprovals.set(id, {
       prompt,
+      createdAt: Date.now(),
       binding: input.binding,
       complete: async (decision) => {
         clearTimeout(timer);
@@ -639,6 +774,75 @@ async function requestToolApproval(input: {
     approved: false,
     reason: consumed.reason === "expired" ? "expired" : "denied",
   };
+}
+
+/**
+ * Prompts the user to raise the per-request tool limit when a page exceeds it.
+ * Returns the granted limit (0 = unlimited) or undefined if denied.
+ */
+async function requestToolLimitApproval(input: {
+  binding: ToolLimitApprovalBinding;
+  requestedTools: number;
+  currentLimit: number;
+}): Promise<number | undefined> {
+  const id = crypto.randomUUID();
+  const expiresAt = Date.now() + 120_000;
+  const prompt: ToolLimitApprovalPrompt = {
+    id,
+    kind: "tool-limit",
+    origin: input.binding.origin,
+    requestedTools: input.requestedTools,
+    currentLimit: input.currentLimit,
+    expiresAt,
+  };
+  const grantedLimit = await new Promise<number | undefined>(
+    (resolve, reject) => {
+      const timer = setTimeout(() => {
+        pendingApprovals.delete(id);
+        reject(
+          new RequestFailure(
+            "APPROVAL_EXPIRED",
+            "The tool-limit approval request expired.",
+            true,
+          ),
+        );
+      }, 120_000);
+      pendingApprovals.set(id, {
+        prompt,
+        createdAt: Date.now(),
+        binding: input.binding,
+        complete: async (decision, limit) => {
+          clearTimeout(timer);
+          pendingApprovals.delete(id);
+          resolve(
+            decision === "approved"
+              ? (limit ?? input.requestedTools)
+              : undefined,
+          );
+        },
+      });
+      void browser.windows
+        .create({
+          url: browser.runtime.getURL(`/approval.html?approvalId=${id}`),
+          type: "popup",
+          width: 620,
+          height: 480,
+          focused: true,
+        })
+        .catch(() => {
+          clearTimeout(timer);
+          pendingApprovals.delete(id);
+          reject(
+            new RequestFailure(
+              "BRIDGE_UNAVAILABLE",
+              "The extension could not open its tool-limit approval window.",
+              true,
+            ),
+          );
+        });
+    },
+  );
+  return grantedLimit;
 }
 
 async function aliasFingerprints(
@@ -1030,7 +1234,47 @@ export default defineBackground(() => {
         }
 
         const rawOptions = decodeWireValue(payload.callOptions);
-        const safeOptions = enforceCallPolicy(rawOptions, alias, settings);
+        // Check tool count before enforcing policy so we can prompt the user
+        // to raise the limit interactively instead of hard-failing.
+        let effectiveSettings = settings;
+        const rawTools = (rawOptions as { tools?: unknown }).tools;
+        if (
+          Array.isArray(rawTools) &&
+          rawTools.length > settings.limits.maxTools
+        ) {
+          const grantedLimit = await requestToolLimitApproval({
+            binding: {
+              origin,
+              tabId,
+              clientId: message.clientId,
+              sessionId: message.sessionId!,
+              requestId,
+              requestedTools: rawTools.length,
+              grantedLimit: rawTools.length,
+            },
+            requestedTools: rawTools.length,
+            currentLimit: settings.limits.maxTools,
+          });
+          if (grantedLimit === undefined) {
+            throw new RequestFailure(
+              "POLICY_VIOLATION",
+              `This page requested ${rawTools.length} tools; the user denied the tool-limit increase.`,
+            );
+          }
+          // 0 means unlimited; otherwise use the granted limit.
+          effectiveSettings = {
+            ...settings,
+            limits: {
+              ...settings.limits,
+              maxTools: grantedLimit === 0 ? rawTools.length : grantedLimit,
+            },
+          };
+        }
+        const safeOptions = enforceCallPolicy(
+          rawOptions,
+          alias,
+          effectiveSettings,
+        );
         reservedTokens =
           typeof safeOptions.maxOutputTokens === "number"
             ? safeOptions.maxOutputTokens
@@ -1577,7 +1821,13 @@ export default defineBackground(() => {
               retryable: true,
             });
           }, 120_000);
+          const expiresAt = Date.now() + 120_000;
           const pending: PendingPermission = {
+            tabId,
+            origin,
+            ...(reason === undefined ? {} : { reason }),
+            createdAt: Date.now(),
+            expiresAt,
             complete: async (decision) => {
               clearTimeout(timer);
               pendingPermissions.delete(key);
@@ -1720,8 +1970,22 @@ export default defineBackground(() => {
             error: "This approval expired or was already used.",
           };
         }
-        await pending.complete(value.decision);
+        await pending.complete(value.decision, value.grantedLimit);
         return { ok: true };
+      }
+      if (value.type === "pending.list") {
+        return { ok: true, pending: listPendingRequests() };
+      }
+      if (value.type === "pending.open") {
+        try {
+          await openPendingRequest(value);
+          return { ok: true };
+        } catch (cause) {
+          return {
+            ok: false,
+            error: cause instanceof Error ? cause.message : String(cause),
+          };
+        }
       }
       if (value.type === "audit.query") {
         let persistent: AuditEvent[] = [];

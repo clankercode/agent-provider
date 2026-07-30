@@ -7,10 +7,9 @@ highest-priority ready item that is not blocked.
 
 ## In progress
 
-- **P0 — Private/local HTTP site bridges + launcher placement + presence UX:**
-  host-based content-script registration with exact-origin recheck (fixes LAN
-  ports); presence vs grant messaging; stable status row; popup combined
-  enable+allow; integrator docs (`docs/INTEGRATING.md`).
+- **P0 — Pending requests in settings + Playwright dogfood docs:** list/open
+  in-flight page-access and step approvals from Options; document CDP control
+  of `approval.html` for automation.
 
 ## Completed on 2026-07-23
 

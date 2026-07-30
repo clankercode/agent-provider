@@ -165,6 +165,14 @@ are re-registered automatically from stored enable grants on worker start.
    `registered content script`, `onConnect`, `bootstrap ready|reject`.
 4. Popup status: `bridgeEnabled`, `permission`, provider configured.
 5. Page runtime: `useAgentProviderState().connection` and `.capabilities`.
+6. Missed approval window → Options → **Pending requests** (or see
+   [PLAYWRIGHT-DOGFOOD.md](./PLAYWRIGHT-DOGFOOD.md) for CDP control of
+   `approval.html`).
+
+## Playwright / automation
+
+Named profile + CDP launcher and how to drive the **separate approval window**:
+[PLAYWRIGHT-DOGFOOD.md](./PLAYWRIGHT-DOGFOOD.md).
 
 ## Threat model reminder
 

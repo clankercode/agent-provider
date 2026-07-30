@@ -45,6 +45,9 @@ returned as structured outcomes.
 [docs/INTEGRATING.md](docs/INTEGRATING.md) (connection states, origin enable,
 launcher placement, Chrome match-pattern pitfalls, debugging).
 
+**Automation / dogfood browser:** [docs/PLAYWRIGHT-DOGFOOD.md](docs/PLAYWRIGHT-DOGFOOD.md)
+(named Playwright profile, CDP, controlling the approval window).
+
 The current implementation enforces exact-origin consent, alias authority
 fingerprints, durable per-origin quotas, audit-first/private execution,
 single-use extension approval, provider destination checks, result scrubbing,

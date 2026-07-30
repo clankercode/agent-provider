@@ -65,13 +65,13 @@ export const DEFAULT_SETTINGS: AgentProviderExtensionSettings = {
   aliases: {
     default: {
       model: "gpt-5-mini",
-      maxOutputTokens: 2_048,
-      reasoning: "low",
+      maxOutputTokens: 65_536,
+      reasoning: "high",
     },
   },
   limits: {
     maxRequestBytes: 512_000,
-    maxOutputTokens: 8_192,
+    maxOutputTokens: 65_536,
     maxConcurrentRequests: 2,
     maxTools: 32,
     requestTimeoutMs: 120_000,
@@ -239,7 +239,7 @@ export function normalizeSettings(
     aliases[alias] = {
       model,
       ...(profileId === undefined ? {} : { profileId }),
-      maxOutputTokens: numberInRange(raw.maxOutputTokens, 2_048, 64, 128_000),
+      maxOutputTokens: numberInRange(raw.maxOutputTokens, 2_048, 64, 524_288),
       ...(reasoning === undefined ? {} : { reasoning }),
       ...(options === undefined ? {} : { authorityOptions: options }),
     };
@@ -293,7 +293,7 @@ export function normalizeSettings(
         rawLimits.maxOutputTokens,
         DEFAULT_SETTINGS.limits.maxOutputTokens,
         64,
-        128_000,
+        524_288,
       ),
       maxConcurrentRequests: numberInRange(
         rawLimits.maxConcurrentRequests,

@@ -12,6 +12,7 @@ export default defineConfig({
       "https://api.anthropic.com/*",
       "https://generativelanguage.googleapis.com/*",
       "https://openrouter.ai/*",
+      "https://models.dev/*",
     ],
     // HTTPS anywhere, plus HTTP only so private/local control planes (LAN IPs,
     // localhost) can opt in via the popup. Public cleartext hosts are still

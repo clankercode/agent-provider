@@ -56,6 +56,20 @@ export type PopupRequest =
       type: "approval.decide";
       approvalId: string;
       decision: "approved" | "denied";
+      grantedLimit?: number;
+    }
+  | {
+      marker: typeof AGENT_PROVIDER_UI_MARKER;
+      type: "pending.list";
+    }
+  | {
+      marker: typeof AGENT_PROVIDER_UI_MARKER;
+      type: "pending.open";
+      /** For permission requests: tabId+origin. For approvals: approvalId. */
+      kind: "permission" | "approval";
+      tabId?: number;
+      origin?: string;
+      approvalId?: string;
     }
   | {
       marker: typeof AGENT_PROVIDER_UI_MARKER;
@@ -106,7 +120,39 @@ export interface ToolApprovalPrompt {
   expiresAt: number;
 }
 
-export type ApprovalPrompt = ProviderApprovalPrompt | ToolApprovalPrompt;
+export interface ToolLimitApprovalPrompt {
+  id: string;
+  kind: "tool-limit";
+  origin: string;
+  requestedTools: number;
+  currentLimit: number;
+  expiresAt: number;
+}
+
+export type ApprovalPrompt =
+  ProviderApprovalPrompt | ToolApprovalPrompt | ToolLimitApprovalPrompt;
+
+/** In-flight page access or step approval, for settings UI + automation. */
+export interface PendingRequestView {
+  kind: "permission" | "provider" | "tool" | "tool-limit";
+  /** Stable id: `permission:${tabId}:${origin}` or approval id. */
+  id: string;
+  tabId?: number;
+  origin: string;
+  reason?: string;
+  summary: string;
+  createdAt: number;
+  expiresAt: number;
+  /** Deep-link to the dedicated approval window. */
+  openUrl: string;
+  /** Present for provider/tool/tool-limit step approvals. */
+  approvalId?: string;
+  alias?: string;
+  toolName?: string;
+  risk?: ToolRisk;
+  requestedTools?: number;
+  currentLimit?: number;
+}
 
 export interface AuditView {
   session: AuditEvent[];
@@ -118,6 +164,7 @@ export interface PopupResponse {
   ok: boolean;
   status?: PopupStatus;
   approval?: ApprovalPrompt;
+  pending?: PendingRequestView[];
   audit?: AuditView;
   deleted?: number;
   error?: string;
@@ -137,8 +184,26 @@ export function isPopupRequest(value: unknown): value is PopupRequest {
   if (record.type === "approval.decide") {
     return (
       typeof record.approvalId === "string" &&
-      (record.decision === "approved" || record.decision === "denied")
+      (record.decision === "approved" || record.decision === "denied") &&
+      (record.grantedLimit === undefined ||
+        (typeof record.grantedLimit === "number" &&
+          Number.isFinite(record.grantedLimit) &&
+          record.grantedLimit >= 0))
     );
+  }
+  if (record.type === "pending.list") {
+    return true;
+  }
+  if (record.type === "pending.open") {
+    if (record.kind === "approval") {
+      return typeof record.approvalId === "string";
+    }
+    if (record.kind === "permission") {
+      return (
+        typeof record.tabId === "number" && typeof record.origin === "string"
+      );
+    }
+    return false;
   }
   if (record.type === "audit.query" || record.type === "audit.delete") {
     return record.origin === undefined || typeof record.origin === "string";

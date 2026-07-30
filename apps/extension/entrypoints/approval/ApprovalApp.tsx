@@ -65,12 +65,14 @@ async function getApproval(approvalId: string): Promise<ApprovalPrompt> {
 async function decideApproval(
   approvalId: string,
   decision: "approved" | "denied",
+  grantedLimit?: number,
 ): Promise<void> {
   const response = (await browser.runtime.sendMessage({
     marker: AGENT_PROVIDER_UI_MARKER,
     type: "approval.decide",
     approvalId,
     decision,
+    ...(grantedLimit === undefined ? {} : { grantedLimit }),
   })) as PopupResponse;
   if (!response.ok) {
     throw new Error(response.error ?? "The extension rejected this decision.");
@@ -130,6 +132,25 @@ export function ApprovalApp() {
     }
   }
 
+  async function decideToolLimit(grantedLimit: number | undefined) {
+    if (details.approvalId === undefined) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (grantedLimit === undefined) {
+        await decideApproval(details.approvalId, "denied");
+        setFinished("deny");
+      } else {
+        await decideApproval(details.approvalId, "approved", grantedLimit);
+        setFinished("approved");
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (finished !== undefined) {
     const denied = finished === "deny";
     return (
@@ -162,6 +183,7 @@ export function ApprovalApp() {
   const extensionPrompt = approval !== undefined;
   const providerPrompt = approval?.kind === "provider";
   const toolPrompt = approval?.kind === "tool";
+  const toolLimitPrompt = approval?.kind === "tool-limit";
   const origin = approval?.origin ?? details.origin;
 
   return (
@@ -179,140 +201,200 @@ export function ApprovalApp() {
         <span className="trust-mark">Trusted surface</span>
       </header>
 
-      <section className="decision-grid">
-        <div className="request-copy">
-          <p className="kicker">
-            {providerPrompt
-              ? "Provider dispatch approval"
-              : toolPrompt
-                ? "Tool callback approval"
-                : "Page access request"}
-          </p>
-          <h1>
-            {providerPrompt
-              ? "Send this model request?"
-              : toolPrompt
-                ? `Run ${approval.toolName}?`
-                : "Let this origin use your model?"}
-          </h1>
-          <p className="lede">
-            {extensionPrompt
-              ? "Audit-first pauses every provider and tool step here. This approval applies once and expires automatically."
-              : "The page will receive model output through Agent Provider. Your API key remains inside extension storage."}
-          </p>
+      {toolLimitPrompt ? (
+        <section className="decision-grid">
+          <div className="request-copy">
+            <p className="kicker">Tool limit approval</p>
+            <h1>Raise the tool limit for this request?</h1>
+            <p className="lede">
+              This page requested {approval.requestedTools} tools but your limit
+              is {approval.currentLimit}. Approving raises the limit for this
+              single request only.
+            </p>
+            <div className="origin-plate">
+              <span>Requesting origin</span>
+              <code>{origin || "Unknown origin"}</code>
+            </div>
+          </div>
+          <aside>
+            <p className="kicker">Choose limit</p>
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => void decideToolLimit(approval.requestedTools)}
+            >
+              <span>
+                Continue (+{approval.requestedTools - approval.currentLimit})
+              </span>
+              <small>Allow {approval.requestedTools} tools this request</small>
+            </button>
+            <div className="tool-limit-aux">
+              <button
+                className="secondary"
+                type="button"
+                disabled={busy}
+                onClick={() => void decideToolLimit(approval.currentLimit + 50)}
+              >
+                +50
+              </button>
+              <button
+                className="secondary"
+                type="button"
+                disabled={busy}
+                onClick={() => void decideToolLimit(0)}
+              >
+                ∞
+              </button>
+            </div>
+            <button
+              className="deny"
+              disabled={busy}
+              onClick={() => void decideToolLimit(undefined)}
+            >
+              Deny request
+            </button>
+            <p className="boundary">
+              The raised limit applies to this single request and is not saved
+              to settings.
+            </p>
+          </aside>
+        </section>
+      ) : (
+        <section className="decision-grid">
+          <div className="request-copy">
+            <p className="kicker">
+              {providerPrompt
+                ? "Provider dispatch approval"
+                : toolPrompt
+                  ? "Tool callback approval"
+                  : "Page access request"}
+            </p>
+            <h1>
+              {providerPrompt
+                ? "Send this model request?"
+                : toolPrompt
+                  ? `Run ${approval.toolName}?`
+                  : "Let this origin use your model?"}
+            </h1>
+            <p className="lede">
+              {extensionPrompt
+                ? "Audit-first pauses every provider and tool step here. This approval applies once and expires automatically."
+                : "The page will receive model output through Agent Provider. Your API key remains inside extension storage."}
+            </p>
 
-          <div className="origin-plate">
-            <span>Requesting origin</span>
-            <code>{origin || "Unknown origin"}</code>
+            <div className="origin-plate">
+              <span>Requesting origin</span>
+              <code>{origin || "Unknown origin"}</code>
+            </div>
+
+            {!extensionPrompt && details.reason ? (
+              <blockquote>
+                <span>Page-provided reason</span>
+                {details.reason}
+              </blockquote>
+            ) : null}
+
+            <dl>
+              <div>
+                <dt>
+                  {providerPrompt
+                    ? "Model alias"
+                    : toolPrompt
+                      ? "Declared risk"
+                      : "Model aliases"}
+                </dt>
+                <dd>
+                  {providerPrompt
+                    ? approval.alias
+                    : toolPrompt
+                      ? approval.risk
+                      : status?.aliases.join(", ") || "Configured aliases"}
+                </dd>
+              </div>
+              <div>
+                <dt>{extensionPrompt ? "Execution mode" : "Provider"}</dt>
+                <dd>
+                  {extensionPrompt
+                    ? "Audit-first · single use"
+                    : status?.providerConfigured
+                      ? "Ready"
+                      : "Needs setup"}
+                </dd>
+              </div>
+              <div>
+                <dt>
+                  {providerPrompt
+                    ? "Request size"
+                    : toolPrompt
+                      ? "Normalized input"
+                      : "Credentials"}
+                </dt>
+                <dd>
+                  {providerPrompt
+                    ? `${approval.requestBytes.toLocaleString()} bytes`
+                    : toolPrompt
+                      ? "Shown below"
+                      : "Never exposed to page code"}
+                </dd>
+              </div>
+            </dl>
+
+            {toolPrompt ? (
+              <pre className="tool-input">
+                {JSON.stringify(decodeWireValue(approval.input), null, 2)}
+              </pre>
+            ) : null}
           </div>
 
-          {!extensionPrompt && details.reason ? (
-            <blockquote>
-              <span>Page-provided reason</span>
-              {details.reason}
-            </blockquote>
-          ) : null}
-
-          <dl>
-            <div>
-              <dt>
-                {providerPrompt
-                  ? "Model alias"
-                  : toolPrompt
-                    ? "Declared risk"
-                    : "Model aliases"}
-              </dt>
-              <dd>
-                {providerPrompt
-                  ? approval.alias
-                  : toolPrompt
-                    ? approval.risk
-                    : status?.aliases.join(", ") || "Configured aliases"}
-              </dd>
-            </div>
-            <div>
-              <dt>{extensionPrompt ? "Execution mode" : "Provider"}</dt>
-              <dd>
-                {extensionPrompt
-                  ? "Audit-first · single use"
-                  : status?.providerConfigured
-                    ? "Ready"
-                    : "Needs setup"}
-              </dd>
-            </div>
-            <div>
-              <dt>
-                {providerPrompt
-                  ? "Request size"
-                  : toolPrompt
-                    ? "Normalized input"
-                    : "Credentials"}
-              </dt>
-              <dd>
-                {providerPrompt
-                  ? `${approval.requestBytes.toLocaleString()} bytes`
-                  : toolPrompt
-                    ? "Shown below"
-                    : "Never exposed to page code"}
-              </dd>
-            </div>
-          </dl>
-
-          {toolPrompt ? (
-            <pre className="tool-input">
-              {JSON.stringify(decodeWireValue(approval.input), null, 2)}
-            </pre>
-          ) : null}
-        </div>
-
-        <aside>
-          <p className="kicker">
-            {extensionPrompt ? "One-time decision" : "Choose scope"}
-          </p>
-          <button
-            className="primary"
-            disabled={
-              busy || (extensionPrompt ? !approval : !details.permissionValid)
-            }
-            onClick={() =>
-              void decide(extensionPrompt ? "approved" : "grant-session")
-            }
-          >
-            <span>{extensionPrompt ? "Allow once" : "Allow this tab"}</span>
-            <small>
-              {extensionPrompt
-                ? "Consumed by this step"
-                : "Ends when the tab closes"}
-            </small>
-          </button>
-          {!extensionPrompt ? (
+          <aside>
+            <p className="kicker">
+              {extensionPrompt ? "One-time decision" : "Choose scope"}
+            </p>
             <button
-              className="secondary"
-              disabled={busy || !details.permissionValid}
-              onClick={() => void decide("grant-persistent")}
+              className="primary"
+              disabled={
+                busy || (extensionPrompt ? !approval : !details.permissionValid)
+              }
+              onClick={() =>
+                void decide(extensionPrompt ? "approved" : "grant-session")
+              }
             >
-              <span>Always allow origin</span>
-              <small>Revocable in settings</small>
+              <span>{extensionPrompt ? "Allow once" : "Allow this tab"}</span>
+              <small>
+                {extensionPrompt
+                  ? "Consumed by this step"
+                  : "Ends when the tab closes"}
+              </small>
             </button>
-          ) : null}
-          <button
-            className="deny"
-            disabled={
-              busy || (extensionPrompt ? !approval : !details.permissionValid)
-            }
-            onClick={() => void decide("deny")}
-          >
-            Deny request
-          </button>
-          <p className="boundary">
-            {providerPrompt
-              ? "Prompt content remains on the page; this surface shows authority metadata only."
-              : toolPrompt
-                ? "Tool input is shown for this decision and is not retained in the metadata audit."
-                : "Trust applies to the entire origin, including every script it runs."}
-          </p>
-        </aside>
-      </section>
+            {!extensionPrompt ? (
+              <button
+                className="secondary"
+                disabled={busy || !details.permissionValid}
+                onClick={() => void decide("grant-persistent")}
+              >
+                <span>Always allow origin</span>
+                <small>Revocable in settings</small>
+              </button>
+            ) : null}
+            <button
+              className="deny"
+              disabled={
+                busy || (extensionPrompt ? !approval : !details.permissionValid)
+              }
+              onClick={() => void decide("deny")}
+            >
+              Deny request
+            </button>
+            <p className="boundary">
+              {providerPrompt
+                ? "Prompt content remains on the page; this surface shows authority metadata only."
+                : toolPrompt
+                  ? "Tool input is shown for this decision and is not retained in the metadata audit."
+                  : "Trust applies to the entire origin, including every script it runs."}
+            </p>
+          </aside>
+        </section>
+      )}
 
       {error ? (
         <p className="error" role="alert">
