@@ -145,17 +145,22 @@ function escapeHtml(text: string): string {
 
 function renderInline(text: string): string {
   let out = escapeHtml(text);
-  // Inline code `code`
-  out = out.replaceAll(
-    /`([^`]+)`/g,
-    '<code class="agent-provider-md-code">$1</code>',
-  );
+  // Extract inline code spans first, replace with placeholders so that
+  // subsequent bold/italic/link regexes cannot match inside their content.
+  const codeSpans: string[] = [];
+  out = out.replaceAll(/`([^`]+)`/g, (_match, code: string) => {
+    const placeholder = `\uE000${codeSpans.length}\uE001`;
+    codeSpans.push(`<code class="agent-provider-md-code">${code}</code>`);
+    return placeholder;
+  });
   // Bold **text** or __text__
   out = out.replaceAll(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
   out = out.replaceAll(/__(.+?)__/g, "<strong>$1</strong>");
-  // Italic *text* or _text_
+  // Italic *text* — asterisks can emphasis-wrap any text.
   out = out.replaceAll(/\*(.+?)\*/g, "<em>$1</em>");
-  out = out.replaceAll(/_(.+?)_/g, "<em>$1</em>");
+  // Italic _text_ — underscores require word boundaries on both sides
+  // (CommonMark rule), so test_command stays literal.
+  out = out.replaceAll(/(?<![\w\uE001])_(.+?)_(?![\w])/g, "<em>$1</em>");
   // Links [text](url) — sanitize against javascript:/data: scheme injection
   out = out.replaceAll(
     /\[([^\]]+)\]\(([^)]+)\)/g,
@@ -165,6 +170,11 @@ function renderInline(text: string): string {
       const href = safe ? escapeHtml(trimmed) : "#";
       return `<a href="${href}" target="_blank" rel="noopener noreferrer">${linkText}</a>`;
     },
+  );
+  // Restore code span placeholders.
+  out = out.replaceAll(
+    /\uE000(\d+)\uE001/g,
+    (_m, idx: string) => codeSpans[Number(idx)] ?? "",
   );
   return out;
 }
