@@ -73,7 +73,7 @@ export const DEFAULT_SETTINGS: AgentProviderExtensionSettings = {
     maxRequestBytes: 512_000,
     maxOutputTokens: 65_536,
     maxConcurrentRequests: 2,
-    maxTools: 32,
+    maxTools: 200,
     requestTimeoutMs: 120_000,
   },
   execution: {
@@ -305,7 +305,7 @@ export function normalizeSettings(
         rawLimits.maxTools,
         DEFAULT_SETTINGS.limits.maxTools,
         0,
-        128,
+        1_000,
       ),
       requestTimeoutMs: numberInRange(
         rawLimits.requestTimeoutMs,

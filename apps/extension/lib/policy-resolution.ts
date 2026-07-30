@@ -24,7 +24,7 @@ export const DEFAULT_AUTHORITY_POLICY: Readonly<AuthorityPolicy> =
     maxRequestBytes: 512_000,
     maxOutputTokens: 65_536,
     maxConcurrentRequests: 2,
-    maxTools: 32,
+    maxTools: 200,
     requestTimeoutMs: 120_000,
     requestsPerMinute: 10,
     requestsPerDay: 200,
