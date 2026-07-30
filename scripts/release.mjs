@@ -126,12 +126,77 @@ for (const [rel] of staged) {
 }
 
 if (dryRun) {
+  // Preview ossification: count how many files have NEXT_VERSION markers.
+  let preview = 0;
+  for (const dir of ["docs", "packages", "apps", "examples"]) {
+    try {
+      const entries = execFileSync(
+        "grep",
+        ["-rl", "NEXT_VERSION", join(root, dir)],
+        { encoding: "utf8" },
+      ).trim();
+      if (entries) preview += entries.split("\n").length;
+    } catch {
+      // grep exits non-zero when no matches.
+    }
+  }
+  if (preview > 0) {
+    console.log(`  would ossify NEXT_VERSION -> ${next} in ${preview} file(s)`);
+  }
   console.log("dry run: no files written, no commit, no tag");
   process.exit(0);
 }
 
 for (const [rel, text] of staged) {
   await writeFile(join(root, rel), text);
+}
+
+// Ossify NEXT_VERSION markers across the tree: replace every "NEXT_VERSION"
+// with the real version number in docs, READMEs, and source comments.
+// See AGENTS.md for the version-marker convention.
+const ossifyTargets = [];
+for (const dir of ["docs", "packages", "apps", "examples"]) {
+  try {
+    const entries = execFileSync(
+      "find",
+      [
+        join(root, dir),
+        "-type",
+        "f",
+        "\\(",
+        "-name",
+        "*.md",
+        "-o",
+        "-name",
+        "*.ts",
+        "-o",
+        "-name",
+        "*.tsx",
+        "-o",
+        "-name",
+        "*.css",
+        "-o",
+        "-name",
+        "*.json",
+        "\\)",
+      ],
+      { encoding: "utf8" },
+    ).trim();
+    if (entries) ossifyTargets.push(...entries.split("\n"));
+  } catch {
+    // Directory may not exist in all checkouts; skip.
+  }
+}
+
+let ossified = 0;
+for (const file of ossifyTargets.filter(Boolean)) {
+  const content = await readFile(file, "utf8");
+  if (!content.includes("NEXT_VERSION")) continue;
+  await writeFile(file, content.replaceAll("NEXT_VERSION", next));
+  ossified++;
+}
+if (ossified > 0) {
+  console.log(`  ossified NEXT_VERSION -> ${next} in ${ossified} file(s)`);
 }
 
 // Sync workspace versions and inter-dep pins into the lockfile.
@@ -142,7 +207,16 @@ execFileSync("npm", ["install", "--package-lock-only", "--ignore-scripts"], {
 
 execFileSync(
   "git",
-  ["add", "package.json", "package-lock.json", ...workspaceManifests],
+  [
+    "add",
+    "package.json",
+    "package-lock.json",
+    ...workspaceManifests,
+    "docs",
+    "packages",
+    "apps",
+    "examples",
+  ],
   { cwd: root, stdio: "inherit" },
 );
 execFileSync("git", ["commit", "-m", `chore: release v${next}`], {

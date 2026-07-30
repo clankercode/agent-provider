@@ -115,6 +115,17 @@ not supported` without the flag. The CI workflow does not need it.
 After the initial publish, configure the trusted publishers as above; every
 later `vX.Y.Z` tag then publishes automatically.
 
+## Version marker ossification
+
+Docs, READMEs, and code comments use the placeholder `NEXT_VERSION` to annotate
+features added since the last release (see `AGENTS.md`). The release script
+automatically replaces every `NEXT_VERSION` with the real version number
+before committing and tagging. After the release commit lands, all markers
+say the actual version (e.g. `New in 0.2.0`).
+
+This is handled by `scripts/release.mjs` — it runs the replacement across the
+entire tree after version-bumping the manifests but before `git commit`.
+
 ## Notes
 
 - The tag name must equal the bumped version (`v0.2.0` ↔ `0.2.0`); CI fails

@@ -9,6 +9,14 @@ wiring a trusted page to the Agent Provider browser extension.
 - Extension-owned model credentials and provider network calls.
 - Exact-origin consent: the page never sees API keys.
 
+> **New in NEXT_VERSION** — The chat header now shows the real model name and tool
+> count by default (`Page tools (42) · Model: gpt-5-mini high`). Override with
+> the `headerLabel` prop (string or `(info) => string`). Assistant messages
+> render markdown. There's an in-progress thinking animation, tool-call
+> indicators (expandable, live status), and error icons. The launcher can be
+> dragged out of its docked corner. The protocol package now works on non-secure
+> HTTP origins (pure-JS SHA-256 fallback when `crypto.subtle` is unavailable).
+
 ## Install packages
 
 ```bash
@@ -66,6 +74,40 @@ export function Copilot() {
 
 Hosts may set `data-placement` and CSS variables themselves if they build a
 custom dock (as control-server does) instead of using `AgentProviderLauncher`.
+
+### Chat surface props (NEXT_VERSION additions)
+
+**New in NEXT_VERSION** — `AgentProviderChat` and `AgentProviderLauncher` gained
+these props:
+
+| Prop | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `headerLabel` | `string \| ((info: { toolCount: number; modelLabel: string }) => string)` | auto | Override the subtitle. Default: `Page tools (n) · Model: gpt-5-mini high` |
+| `thinkingColor` | `string` | accent | CSS color for the thinking dots animation (also settable via `--agent-provider-thinking`) |
+| `markdown` | `boolean` | `true` | Render assistant messages with markdown (bold, italic, code, links, headings, lists) |
+| `draggable` | `boolean` | `false` | Let the launcher panel be dragged out of its docked corner |
+| `showToolActivity` | `boolean` | `true` | Show collapsible tool-call indicators in the transcript |
+
+`headerLabel` examples:
+
+```tsx
+// Fixed string
+<AgentProviderLauncher headerLabel="Copilot" />
+
+// Custom format with template
+<AgentProviderLauncher
+  headerLabel={({ toolCount, modelLabel }) =>
+    `🛠️ ${toolCount} tools · 🤖 ${modelLabel}`
+  }
+/>
+```
+
+Tool-call indicators show a colored status dot (pulsing = running, accent =
+done, red = failed/denied, gold = awaiting approval), the tool name, and the
+phase. Click to expand; arguments and results are collapsed by default.
+
+The drag handle appears above the chat when `draggable` is set. Drag the panel
+to pop it out to a fixed position; click **Dock** to return it to the corner.
 
 ## Connection states (presence vs grant)
 

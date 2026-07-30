@@ -265,7 +265,10 @@ async function openPendingRequest(value: {
 }): Promise<void> {
   let url: string | undefined;
   if (value.kind === "approval") {
-    if (value.approvalId === undefined || !pendingApprovals.has(value.approvalId)) {
+    if (
+      value.approvalId === undefined ||
+      !pendingApprovals.has(value.approvalId)
+    ) {
       throw new Error("That approval is no longer pending.");
     }
     url = browser.runtime.getURL(
@@ -957,6 +960,12 @@ async function capabilitiesFor(
   settings?: AgentProviderExtensionSettings,
 ): Promise<BridgeCapabilities> {
   const current = settings ?? (await loadSettings());
+  const aliasModels: Record<string, string> = {};
+  const aliasReasoning: Record<string, string> = {};
+  for (const [id, alias] of Object.entries(current.aliases)) {
+    aliasModels[id] = alias.model;
+    if (alias.reasoning !== undefined) aliasReasoning[id] = alias.reasoning;
+  }
   return {
     protocolVersion: AGENT_PROVIDER_PROTOCOL_VERSION,
     extensionVersion: browser.runtime.getManifest().version,
@@ -968,6 +977,8 @@ async function capabilitiesFor(
         (profile) => profile.apiKey.length > 0,
       ),
     aliases: Object.keys(current.aliases).sort(),
+    aliasModels,
+    aliasReasoning,
     limits: current.limits,
   };
 }

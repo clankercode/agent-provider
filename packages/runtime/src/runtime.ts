@@ -59,6 +59,7 @@ export class AgentProviderRuntime {
   private readonly toolDefinitions: NonNullable<
     AgentProviderRuntimeOptions["tools"]
   >;
+  private readonly modelAlias: string;
   private modelMessages: ModelMessage[] = [];
   private activeAbortController: AbortController | undefined;
   private activeRunId: string | undefined;
@@ -83,6 +84,7 @@ export class AgentProviderRuntime {
       )();
     this.suggestions = options.suggestions ?? [];
     this.toolDefinitions = options.tools ?? {};
+    this.modelAlias = options.modelAlias ?? "default";
 
     const initialMessages = (
       options.initialMessages ?? []
@@ -147,6 +149,20 @@ export class AgentProviderRuntime {
   }
 
   getSnapshot = (): AgentProviderRuntimeState => this.state;
+
+  /** Number of page-declared tools. New in NEXT_VERSION. */
+  get toolCount(): number {
+    return Object.keys(this.toolDefinitions).length;
+  }
+
+  /** Resolved model label for the active alias (e.g. "gpt-5-mini high"). */
+  get modelLabel(): string {
+    const caps = this.state.capabilities;
+    if (caps === undefined) return "";
+    const model = caps.aliasModels[this.modelAlias] ?? "";
+    const reasoning = caps.aliasReasoning[this.modelAlias];
+    return reasoning === undefined ? model : `${model} ${reasoning}`;
+  }
 
   subscribe = (listener: Listener): (() => void) => {
     this.listeners.add(listener);

@@ -36,6 +36,30 @@ export interface AgentProviderChatProps {
   components?: AgentProviderChatComponents;
   autoConnect?: boolean;
   showToolActivity?: boolean;
+  /**
+   * Override the subtitle in the chat header. Pass a string for a fixed
+   * label, or a function that receives `{ toolCount, modelLabel }` and
+   * returns a string. When omitted the default format is used:
+   * "Page tools (n) · Model: gpt-5-mini high".
+   *
+   * New in NEXT_VERSION.
+   */
+  headerLabel?:
+    string | ((info: { toolCount: number; modelLabel: string }) => string);
+  /**
+   * CSS custom property for the thinking indicator color. Default uses
+   * --agent-provider-accent. Set to a color value to customise.
+   *
+   * New in NEXT_VERSION.
+   */
+  thinkingColor?: string;
+  /**
+   * When true, render assistant messages with markdown formatting.
+   * Default: true.
+   *
+   * New in NEXT_VERSION.
+   */
+  markdown?: boolean;
 }
 
 /**
@@ -44,10 +68,7 @@ export interface AgentProviderChatProps {
  * offsets use the `--agent-provider-inset-*` custom properties.
  */
 export type AgentProviderLauncherPlacement =
-  | "bottom-right"
-  | "bottom-left"
-  | "top-right"
-  | "top-left";
+  "bottom-right" | "bottom-left" | "top-right" | "top-left";
 
 export interface AgentProviderLauncherInsets {
   top?: number | string;
@@ -86,18 +107,162 @@ const DefaultTextarea: ComponentType<
   TextareaHTMLAttributes<HTMLTextAreaElement>
 > = (props) => <textarea {...props} />;
 
-function DefaultMessage({ message }: { message: AgentProviderMessage }) {
+// ---------------------------------------------------------------------------
+// Lightweight markdown renderer — no dependencies, handles the common cases:
+// code blocks, inline code, bold, italic, links, headings, unordered lists,
+// and paragraphs. Output is rendered via dangerouslySetInnerHTML with basic
+// HTML-escaping to prevent injection.
+// ---------------------------------------------------------------------------
+
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function renderInline(text: string): string {
+  let out = escapeHtml(text);
+  // Inline code `code`
+  out = out.replaceAll(
+    /`([^`]+)`/g,
+    '<code class="agent-provider-md-code">$1</code>',
+  );
+  // Bold **text** or __text__
+  out = out.replaceAll(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+  out = out.replaceAll(/__(.+?)__/g, "<strong>$1</strong>");
+  // Italic *text* or _text_
+  out = out.replaceAll(/\*(.+?)\*/g, "<em>$1</em>");
+  out = out.replaceAll(/_(.+?)_/g, "<em>$1</em>");
+  // Links [text](url) — sanitize against javascript:/data: scheme injection
+  out = out.replaceAll(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    (_match, linkText: string, url: string) => {
+      const trimmed = url.trim();
+      const safe = /^(https?:\/\/|mailto:|\/|#|\.\/)/.test(trimmed);
+      const href = safe ? escapeHtml(trimmed) : "#";
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${linkText}</a>`;
+    },
+  );
+  return out;
+}
+
+function renderMarkdown(text: string): string {
+  const lines = text.split("\n");
+  const html: string[] = [];
+  let inCodeBlock = false;
+  let codeLines: string[] = [];
+  let inList = false;
+
+  const closeList = () => {
+    if (inList) {
+      html.push("</ul>");
+      inList = false;
+    }
+  };
+
+  for (const line of lines) {
+    // Code block fence
+    if (line.trimStart().startsWith("```")) {
+      if (inCodeBlock) {
+        html.push(
+          `<pre class="agent-provider-md-pre"><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`,
+        );
+        codeLines = [];
+        inCodeBlock = false;
+      } else {
+        closeList();
+        inCodeBlock = true;
+      }
+      continue;
+    }
+    if (inCodeBlock) {
+      codeLines.push(line);
+      continue;
+    }
+
+    // Headings
+    const heading = line.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      closeList();
+      const level = heading[1]!.length;
+      html.push(`<h${level}>${renderInline(heading[2]!)}</h${level}>`);
+      continue;
+    }
+
+    // Unordered list items
+    if (/^\s*[-*]\s+/.test(line)) {
+      if (!inList) {
+        html.push('<ul class="agent-provider-md-ul">');
+        inList = true;
+      }
+      html.push(`<li>${renderInline(line.replace(/^\s*[-*]\s+/, ""))}</li>`);
+      continue;
+    }
+
+    // Blank line
+    if (line.trim() === "") {
+      closeList();
+      continue;
+    }
+
+    // Regular paragraph
+    closeList();
+    html.push(`<p>${renderInline(line)}</p>`);
+  }
+
+  // Close any open blocks
+  if (inCodeBlock) {
+    html.push(
+      `<pre class="agent-provider-md-pre"><code>${escapeHtml(codeLines.join("\n"))}</code></pre>`,
+    );
+  }
+  closeList();
+
+  return html.join("");
+}
+
+function DefaultMessage({
+  message,
+  markdown = true,
+}: {
+  message: AgentProviderMessage;
+  markdown?: boolean;
+}) {
+  const isUser = message.role === "user";
+  const isError = message.status === "error";
+  const html = useMemo(() => {
+    if (isUser || !markdown || !message.text) return undefined;
+    return renderMarkdown(message.text);
+  }, [isUser, markdown, message.text]);
+
   return (
     <article
       className={`agent-provider-message agent-provider-message--${message.role}`}
       data-status={message.status}
     >
       <span className="agent-provider-message__role">
-        {message.role === "assistant" ? "AgentProvider" : "You"}
+        {isUser ? "You" : "Agent"}
       </span>
       <div className="agent-provider-message__text">
-        {message.text || (message.status === "streaming" ? "…" : "")}
+        {isUser || !html ? (
+          message.text || (message.status === "streaming" ? "…" : "")
+        ) : (
+          <div
+            className="agent-provider-md"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        )}
       </div>
+      {isError ? (
+        <span className="agent-provider-message__icon agent-provider-message__icon--error">
+          ⚠
+        </span>
+      ) : message.status === "streaming" ? (
+        <span className="agent-provider-message__icon agent-provider-message__icon--thinking">
+          <span className="agent-provider-dot" />
+        </span>
+      ) : null}
     </article>
   );
 }
@@ -155,10 +320,64 @@ function DefaultApproval({
 }
 
 function DefaultActivity({ activity }: { activity: ToolActivity }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const phaseLabel: Record<ToolActivity["phase"], string> = {
+    "awaiting-approval": "awaiting approval",
+    running: "running…",
+    succeeded: "done",
+    denied: "denied",
+    failed: "failed",
+  };
+  const summary =
+    activity.error ??
+    (activity.output ? "result" : activity.input ? "args" : "");
+
   return (
-    <div className="agent-provider-activity">
-      <span>{activity.toolName}</span>
-      <span>{activity.phase.replaceAll("-", " ")}</span>
+    <div
+      className={`agent-provider-tool agent-provider-tool--${activity.phase}`}
+    >
+      <button
+        type="button"
+        className="agent-provider-tool__header"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <span
+          className={`agent-provider-tool__status agent-provider-tool__status--${activity.phase}`}
+        />
+        <span className="agent-provider-tool__name">{activity.toolName}</span>
+        <span className="agent-provider-tool__phase">
+          {phaseLabel[activity.phase]}
+        </span>
+        <span className="agent-provider-tool__chevron">
+          {expanded ? "▾" : "▸"}
+        </span>
+      </button>
+      {expanded ? (
+        <div className="agent-provider-tool__body">
+          {activity.input !== undefined ? (
+            <details className="agent-provider-tool__section">
+              <summary>Arguments</summary>
+              <pre>{displayJson(activity.input)}</pre>
+            </details>
+          ) : null}
+          {activity.output !== undefined ? (
+            <details className="agent-provider-tool__section">
+              <summary>Result</summary>
+              <pre>{displayJson(activity.output)}</pre>
+            </details>
+          ) : null}
+          {activity.error !== undefined ? (
+            <details className="agent-provider-tool__section" open>
+              <summary>Error</summary>
+              <pre className="agent-provider-tool__error">{activity.error}</pre>
+            </details>
+          ) : null}
+        </div>
+      ) : summary.length > 0 ? (
+        <div className="agent-provider-tool__summary">{summary}</div>
+      ) : null}
     </div>
   );
 }
@@ -177,6 +396,9 @@ export function AgentProviderChat({
   components = {},
   autoConnect = true,
   showToolActivity = true,
+  headerLabel,
+  thinkingColor,
+  markdown = true,
 }: AgentProviderChatProps) {
   const runtime = useAgentProviderRuntime();
   const state = useAgentProviderState();
@@ -186,8 +408,8 @@ export function AgentProviderChat({
 
   const Button = components.Button ?? DefaultButton;
   const Textarea = components.Textarea ?? DefaultTextarea;
-  const Message = components.Message ?? DefaultMessage;
   const Activity = components.Activity ?? DefaultActivity;
+  const Message = components.Message;
 
   const granted = isPermissionGranted(state.capabilities?.permission);
   const providerConfigured = state.capabilities?.providerConfigured ?? true;
@@ -223,6 +445,20 @@ export function AgentProviderChat({
     return undefined;
   }, [granted, providerConfigured, state.connection, state.error]);
 
+  const subtitle = useMemo(() => {
+    if (typeof headerLabel === "string") return headerLabel;
+    const toolCount = runtime.toolCount;
+    const modelLabel = runtime.modelLabel;
+    if (typeof headerLabel === "function")
+      return headerLabel({ toolCount, modelLabel });
+    // Default format: "Page tools (n) · Model: gpt-5-mini high"
+    const parts: string[] = [];
+    if (toolCount > 0) parts.push(`Page tools (${toolCount})`);
+    if (modelLabel.length > 0) parts.push(`Model: ${modelLabel}`);
+    return parts.length > 0 ? parts.join(" · ") : "Page tools · your model";
+    // state.capabilities is in deps so the label refreshes after connect.
+  }, [headerLabel, runtime, state.capabilities]);
+
   const showConnectAction =
     state.connection !== "connecting" &&
     (state.connection === "unavailable" ||
@@ -243,7 +479,7 @@ export function AgentProviderChat({
       const current = runtime.getSnapshot();
       if (!isPermissionGranted(current.capabilities?.permission)) {
         await runtime.requestPermission(
-          "Use your configured model with this page’s prompt and tool schemas.",
+          "Use your configured model with this page's prompt and tool schemas.",
         );
       }
     } finally {
@@ -266,24 +502,43 @@ export function AgentProviderChat({
     }
   }
 
+  const headerStyle = useMemo(
+    () =>
+      thinkingColor === undefined
+        ? undefined
+        : ({
+            "--agent-provider-thinking": thinkingColor,
+          } as React.CSSProperties),
+    [thinkingColor],
+  );
+
   return (
     <section
       className={`agent-provider-chat ${className}`.trim()}
       aria-label={title}
+      data-busy={busy || undefined}
+      style={headerStyle}
     >
       <header className="agent-provider-header">
         <div>
           <strong>{title}</strong>
-          <span>Page tools · your model</span>
+          <span>{subtitle}</span>
         </div>
         {busy ? (
-          <Button
-            type="button"
-            className="agent-provider-button agent-provider-button--ghost"
-            onClick={() => runtime.cancel()}
-          >
-            Stop
-          </Button>
+          <div className="agent-provider-header__actions">
+            <span className="agent-provider-thinking">
+              <span className="agent-provider-dot" />
+              <span className="agent-provider-dot" />
+              <span className="agent-provider-dot" />
+            </span>
+            <Button
+              type="button"
+              className="agent-provider-button agent-provider-button--ghost"
+              onClick={() => runtime.cancel()}
+            >
+              Stop
+            </Button>
+          </div>
         ) : null}
       </header>
 
@@ -324,13 +579,21 @@ export function AgentProviderChat({
             declared tools.
           </div>
         ) : null}
-        {state.messages.map((message) => (
-          <Message key={message.id} message={message} />
-        ))}
+        {state.messages.map((message) =>
+          Message === undefined ? (
+            <DefaultMessage
+              key={message.id}
+              message={message}
+              markdown={markdown}
+            />
+          ) : (
+            <Message key={message.id} message={message} />
+          ),
+        )}
 
         {showToolActivity
           ? state.toolActivity
-              .slice(-4)
+              .slice(-8)
               .map((activity) => (
                 <Activity key={activity.id} activity={activity} />
               ))
@@ -421,6 +684,14 @@ export interface AgentProviderLauncherProps extends AgentProviderChatProps {
   /** When false, the launcher fades out via `data-visible` (probe gating). */
   visible?: boolean;
   className?: string;
+  /**
+   * When true, the chat panel can be dragged by its header to pop out of
+   * the docked corner. The panel becomes position:fixed and follows the
+   * cursor. Close/drag back to re-dock.
+   *
+   * New in NEXT_VERSION.
+   */
+  draggable?: boolean;
 }
 
 export function AgentProviderLauncher({
@@ -430,11 +701,79 @@ export function AgentProviderLauncher({
   insets,
   visible = true,
   className = "",
+  draggable = false,
   ...chatProps
 }: AgentProviderLauncherProps) {
   const [open, setOpen] = useState(defaultOpen);
+  const [poppedOut, setPoppedOut] = useState(false);
+  const [dragPos, setDragPos] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    panelX: number;
+    panelY: number;
+  } | null>(null);
   const Button = chatProps.components?.Button ?? DefaultButton;
   const insetStyle = launcherInsetStyle(insets);
+  const headerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!poppedOut) return;
+    const handleMove = (e: PointerEvent) => {
+      if (dragRef.current === null) return;
+      const dx = e.clientX - dragRef.current.startX;
+      const dy = e.clientY - dragRef.current.startY;
+      setDragPos({
+        x: Math.max(0, dragRef.current.panelX + dx),
+        y: Math.max(0, dragRef.current.panelY + dy),
+      });
+    };
+    const handleUp = () => {
+      dragRef.current = null;
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp);
+    return () => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+    };
+  }, [poppedOut]);
+
+  function handleHeaderPointerDown(e: React.PointerEvent) {
+    if (!draggable) return;
+    const panel = headerRef.current?.closest(
+      ".agent-provider-launcher__panel",
+    ) as HTMLElement | null;
+    if (panel === null) return;
+    const rect = panel.getBoundingClientRect();
+    // Only initiate drag from non-docked edges/corners (the header itself).
+    // On first drag, pop out to fixed position.
+    if (!poppedOut) {
+      setPoppedOut(true);
+      setDragPos({ x: rect.left, y: rect.top });
+    }
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      panelX: poppedOut ? (dragPos?.x ?? rect.left) : rect.left,
+      panelY: poppedOut ? (dragPos?.y ?? rect.top) : rect.top,
+    };
+  }
+
+  const panelStyle =
+    poppedOut && dragPos !== null
+      ? {
+          position: "fixed" as const,
+          left: `${dragPos.x}px`,
+          top: `${dragPos.y}px`,
+          right: "auto" as const,
+          bottom: "auto" as const,
+          margin: 0,
+        }
+      : undefined;
 
   return (
     <div
@@ -444,14 +783,34 @@ export function AgentProviderLauncher({
       data-open={open}
       data-placement={placement}
       data-visible={visible}
+      data-popped-out={poppedOut || undefined}
       style={insetStyle}
     >
-      {/* Keep the chat mounted while closed so the transcript survives
-          open/close and the panel can fade/slide via CSS (driven by
-          data-open on the wrapper) instead of mounting/unmounting
-          abruptly. Note this also means the chat's auto-connect probe
-          fires when the launcher mounts, not on first open. */}
-      <div className="agent-provider-launcher__panel">
+      <div
+        className="agent-provider-launcher__panel"
+        style={panelStyle}
+        ref={headerRef}
+      >
+        <div
+          className="agent-provider-launcher__drag-handle"
+          onPointerDown={draggable ? handleHeaderPointerDown : undefined}
+          style={{ display: draggable ? "block" : "none" }}
+        >
+          {poppedOut ? (
+            <button
+              type="button"
+              className="agent-provider-launcher__dock"
+              onClick={() => {
+                setPoppedOut(false);
+                setDragPos(null);
+              }}
+            >
+              ⤓ Dock
+            </button>
+          ) : (
+            <span className="agent-provider-launcher__drag-hint">⤢ Drag</span>
+          )}
+        </div>
         <AgentProviderChat {...chatProps} />
       </div>
       <Button

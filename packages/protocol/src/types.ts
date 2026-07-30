@@ -54,10 +54,7 @@ export interface BootstrapReject {
   type: "reject";
   direction: "extension-to-page";
   clientId: string;
-  code:
-    | "NO_VERSION_OVERLAP"
-    | "INVALID_BOOTSTRAP"
-    | "ORIGIN_NOT_ENABLED";
+  code: "NO_VERSION_OVERLAP" | "INVALID_BOOTSTRAP" | "ORIGIN_NOT_ENABLED";
   /** Optional human-readable guidance for ORIGIN_NOT_ENABLED and similar. */
   message?: string;
 }
@@ -80,6 +77,10 @@ export interface BridgeCapabilities {
   permission: PermissionState;
   providerConfigured: boolean;
   aliases: string[];
+  /** Alias ID → resolved model string (e.g. "gpt-5-mini"). New in NEXT_VERSION. */
+  aliasModels: Record<string, string>;
+  /** Alias ID → reasoning effort (e.g. "high"), if set. New in NEXT_VERSION. */
+  aliasReasoning: Record<string, string>;
   limits: BridgeLimits;
 }
 

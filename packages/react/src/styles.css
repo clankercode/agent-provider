@@ -179,6 +179,214 @@
   );
 }
 
+/* Message icon in the 'far' empty space (RHS for assistant, LHS for user) */
+.agent-provider-message__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 18px;
+  font-size: 12px;
+}
+.agent-provider-message--assistant .agent-provider-message__icon {
+  align-self: flex-end;
+}
+.agent-provider-message--user .agent-provider-message__icon {
+  align-self: flex-start;
+}
+.agent-provider-message__icon--error {
+  color: var(--agent-provider-danger);
+}
+
+/* Thinking dots animation */
+.agent-provider-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--agent-provider-thinking, var(--agent-provider-accent));
+  animation: agent-provider-pulse 1.2s ease-in-out infinite;
+}
+.agent-provider-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.agent-provider-dot:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes agent-provider-pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.2;
+    transform: scale(0.8);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.agent-provider-thinking {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.agent-provider-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-provider-dot {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
+/* Markdown rendering inside assistant messages */
+.agent-provider-md p {
+  margin: 0 0 8px;
+}
+.agent-provider-md p:last-child {
+  margin-bottom: 0;
+}
+.agent-provider-md h1,
+.agent-provider-md h2,
+.agent-provider-md h3,
+.agent-provider-md h4 {
+  margin: 12px 0 6px;
+  font-weight: 700;
+}
+.agent-provider-md h1 {
+  font-size: 1.3em;
+}
+.agent-provider-md h2 {
+  font-size: 1.2em;
+}
+.agent-provider-md h3 {
+  font-size: 1.1em;
+}
+.agent-provider-md h4 {
+  font-size: 1em;
+}
+.agent-provider-md ul {
+  margin: 0 0 8px;
+  padding-left: 20px;
+  list-style: disc;
+}
+.agent-provider-md a {
+  color: var(--agent-provider-accent);
+}
+.agent-provider-md-code {
+  border-radius: 4px;
+  padding: 1px 4px;
+  background: color-mix(in srgb, var(--agent-provider-border) 30%, transparent);
+  font-family: ui-monospace, monospace;
+  font-size: 0.9em;
+}
+.agent-provider-md-pre {
+  max-width: 100%;
+  max-height: 240px;
+  overflow: auto;
+  margin: 8px 0;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--agent-provider-text) 8%, transparent);
+  white-space: pre;
+  font-family: ui-monospace, monospace;
+  font-size: 0.85em;
+}
+
+/* Tool call indicators */
+.agent-provider-tool {
+  margin: 6px 0;
+  border: 1px solid var(--agent-provider-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--agent-provider-panel-2, var(--agent-provider-panel));
+  font-size: 12px;
+}
+.agent-provider-tool__header {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  padding: 5px 8px;
+  background: transparent;
+  color: var(--agent-provider-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.agent-provider-tool__status {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--agent-provider-muted);
+}
+.agent-provider-tool__status--running {
+  background: var(--agent-provider-accent);
+  animation: agent-provider-pulse 1s ease-in-out infinite;
+}
+.agent-provider-tool__status--succeeded {
+  background: var(--agent-provider-accent);
+}
+.agent-provider-tool__status--failed {
+  background: var(--agent-provider-danger);
+}
+.agent-provider-tool__status--denied {
+  background: var(--agent-provider-danger);
+}
+.agent-provider-tool__status--awaiting-approval {
+  background: gold;
+}
+.agent-provider-tool__name {
+  font-weight: 600;
+}
+.agent-provider-tool__phase {
+  margin-left: auto;
+  color: var(--agent-provider-muted);
+  font-size: 11px;
+}
+.agent-provider-tool__chevron {
+  color: var(--agent-provider-muted);
+}
+.agent-provider-tool__summary {
+  padding: 2px 8px 5px 24px;
+  color: var(--agent-provider-muted);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.agent-provider-tool__body {
+  padding: 4px 8px 8px;
+}
+.agent-provider-tool__section {
+  margin-top: 4px;
+}
+.agent-provider-tool__section > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--agent-provider-muted);
+}
+.agent-provider-tool__section pre {
+  max-height: 180px;
+  overflow: auto;
+  margin: 4px 0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--agent-provider-text) 8%, transparent);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.agent-provider-tool__error {
+  color: var(--agent-provider-danger);
+}
+
 .agent-provider-button,
 .agent-provider-chip,
 .agent-provider-launcher__button {
@@ -464,6 +672,33 @@
 .agent-provider-launcher[data-placement="top-left"][data-open="false"]
   .agent-provider-launcher__panel {
   transform: translateY(-8px);
+}
+
+/* Drag handle for popped-out launcher panel */
+.agent-provider-launcher__drag-handle {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--agent-provider-border);
+  cursor: grab;
+  user-select: none;
+  font-size: 11px;
+  color: var(--agent-provider-muted);
+}
+.agent-provider-launcher__drag-handle:active {
+  cursor: grabbing;
+}
+.agent-provider-launcher__dock {
+  border: 1px solid var(--agent-provider-border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  background: var(--agent-provider-panel);
+  color: var(--agent-provider-text);
+  font-size: 11px;
+  cursor: pointer;
+}
+.agent-provider-launcher__drag-hint {
+  opacity: 0.6;
 }
 
 @media (prefers-color-scheme: dark) {

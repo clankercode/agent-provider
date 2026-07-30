@@ -73,6 +73,23 @@ Components:
   the same fade (e.g. while probing for the extension), set `visible={false}`
   or `data-visible="false"` on the `.agent-provider-launcher` element.
 
+**New in NEXT_VERSION** — additional props on `AgentProviderChat` and
+`AgentProviderLauncher`:
+
+| Prop | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `headerLabel` | `string \| ((info: { toolCount: number; modelLabel: string }) => string)` | auto | Override the header subtitle. Default: `Page tools (n) · Model: gpt-5-mini high` |
+| `thinkingColor` | `string` | accent | CSS color for thinking dots (also via `--agent-provider-thinking`) |
+| `markdown` | `boolean` | `true` | Render assistant messages with markdown formatting |
+| `draggable` | `boolean` | `false` | Let the launcher panel be dragged out of its docked corner |
+| `showToolActivity` | `boolean` | `true` | Show collapsible tool-call indicators |
+
+Also new in NEXT_VERSION: assistant message role label is "Agent" (was
+"AgentProvider"). Tool-call indicators show live status dots, tool name, and
+phase; click to expand args/results (collapsed by default). Error messages show
+a warning icon in the far empty space of each message row. The launcher's
+`draggable` prop adds a drag handle to pop the panel out to a fixed position.
+
 Hooks (must be used inside `AgentProviderProvider`):
 
 - `useAgentProviderRuntime()` — the runtime instance.

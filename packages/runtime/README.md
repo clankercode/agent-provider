@@ -82,6 +82,36 @@ Pending approvals appear in `state.approvals`; resolve them from your UI with
 - Call `runtime.destroy()` on teardown; it cancels active runs and pending
   approvals and disposes the bridge.
 
+### Dev-only debug tools
+
+**New in NEXT_VERSION** — `createDebugTools()` returns a set of side-effect-free
+tools for testing the tool-call pipeline. Guard with `import.meta.env.DEV` —
+never include in production builds.
+
+```ts
+import { instantChatbot, createDebugTools } from "@agent-provider/runtime";
+
+const debugTools = import.meta.env.DEV ? createDebugTools() : {};
+const runtime = instantChatbot({
+  tools: {
+    ...debugTools,
+    // your real tools here
+  },
+});
+```
+
+Available debug tools: `debug_echo`, `debug_echo_delayed`, `debug_sleep`,
+`debug_ap_info` (returns run/tool IDs), `debug_models`.
+
+### Runtime getters
+
+**New in NEXT_VERSION** — `AgentProviderRuntime` exposes two read-only
+getters for UI display:
+
+- `runtime.toolCount` — number of page-declared tools.
+- `runtime.modelLabel` — resolved model + reasoning for the active alias
+  (e.g. `"gpt-5-mini high"`), read from bridge capabilities.
+
 ## Links
 
 - Repository: https://github.com/clankercode/agent-provider
